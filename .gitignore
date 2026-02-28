@@ -1,0 +1,13 @@
+node_modules/
+.env
+.cloudflared.pid
+.cloudflared.log
+.tmp-http.pid
+.tmp-http.log
+bot.log
+bin/cloudflared.tgz
+
+# local runtime artifacts
+.bot.pid
+.dashboard_token_generated
+bin/cloudflared
