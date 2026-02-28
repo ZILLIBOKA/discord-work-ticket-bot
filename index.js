@@ -794,7 +794,9 @@ function startDashboardServer() {
     }
     const guildState = ensureGuild(guild.id);
 
-    await guild.members.fetch().catch(() => null);
+    await guild.channels.fetch().catch(() => null);
+    await guild.roles.fetch().catch(() => null);
+    await guild.members.fetch({ limit: 1000 }).catch(() => null);
     const openTickets = Object.entries(guildState.ticketChannels || {})
       .map(([channelId, meta]) => serializeTicket(guild, channelId, meta))
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -822,11 +824,23 @@ function startDashboardServer() {
       .map((r) => ({ id: r.id, name: r.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    const memberOptions = guild.members.cache
+    let memberOptions = guild.members.cache
       .filter((m) => !m.user.bot)
       .map((m) => ({ id: m.id, name: `${m.user.username} (${m.id})` }))
       .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 500);
+
+    if (memberOptions.length === 0) {
+      // Fallback set so dashboard still works even when member intent/cache is limited.
+      const fallbackIds = new Set([
+        ...(guildState.tickets.managerUserIds || []),
+        ...Object.values(guildState.ticketChannels || {}).map((t) => String(t.ownerId || '')),
+        ...(guildState.tickets.history || []).map((t) => String(t.ownerId || ''))
+      ]);
+      memberOptions = Array.from(fallbackIds)
+        .filter(Boolean)
+        .map((id) => ({ id, name: `User ID ${id}` }));
+    }
 
     res.json({
       guild: { id: guild.id, name: guild.name },

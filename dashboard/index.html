@@ -3,78 +3,414 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ticket Dashboard</title>
+  <title>Discord Ticket Dashboard</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
     :root {
-      --bg: #f5f7fb;
-      --card: #ffffff;
-      --line: #d9e2f2;
-      --text: #162134;
-      --accent: #0b63f3;
+      --bg-1: #f6f9fc;
+      --bg-2: #e9eef8;
+      --panel: #ffffff;
+      --line: #d4deee;
+      --line-strong: #b9c8e6;
+      --text: #15243d;
+      --muted: #5e6f8d;
+      --accent: #0f5ee9;
+      --accent-2: #12a1ff;
+      --danger: #d13a49;
+      --ok: #128058;
+      --shadow: 0 18px 40px rgba(15, 37, 77, 0.08);
+      --radius: 16px;
     }
+
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: "Segoe UI", "Apple SD Gothic Neo", sans-serif; background: var(--bg); color: var(--text); }
-    header { padding: 14px 18px; background: #0f1e3c; color: #fff; font-weight: 700; }
-    main { padding: 16px; display: grid; gap: 12px; }
-    .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    input, select, textarea, button { border-radius: 8px; border: 1px solid var(--line); padding: 8px 10px; font-size: 14px; }
-    button { background: var(--accent); color: #fff; border: none; cursor: pointer; }
-    button.ghost { background: #eef3ff; color: #123; border: 1px solid var(--line); }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { border-bottom: 1px solid var(--line); padding: 6px; text-align: left; }
-    th { background: #f2f6ff; }
-    .list { margin: 0; padding-left: 18px; }
-    .muted { color: #567; font-size: 12px; }
-    textarea { min-height: 90px; width: 100%; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+      background:
+        radial-gradient(circle at 8% 8%, rgba(15, 94, 233, 0.16), transparent 22%),
+        radial-gradient(circle at 88% 0%, rgba(18, 161, 255, 0.14), transparent 24%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-2));
+      min-height: 100vh;
+    }
+
+    .topbar {
+      padding: 16px 22px;
+      background: linear-gradient(90deg, #0d1f3e, #0e2b56);
+      color: #fff;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      font-size: 20px;
+    }
+
+    .status {
+      font-size: 13px;
+      color: #dbe9ff;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      padding: 6px 12px;
+      max-width: 60%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .container {
+      max-width: 1320px;
+      margin: 22px auto;
+      padding: 0 16px 26px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 21px;
+      font-weight: 700;
+      font-family: 'Space Grotesk', 'Noto Sans KR', sans-serif;
+    }
+
+    .hint {
+      margin: 2px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(120px, 180px));
+      gap: 8px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: linear-gradient(180deg, #fdfefe, #f6f9fe);
+    }
+
+    .metric .k {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .metric .v {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 21px;
+      font-weight: 700;
+      line-height: 1.05;
+      margin-top: 2px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 14px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .field,
+    .select,
+    .textarea,
+    .btn {
+      width: 100%;
+      border-radius: 12px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .field,
+    .select,
+    .textarea {
+      border: 1px solid var(--line-strong);
+      background: #fff;
+      color: var(--text);
+      padding: 10px 12px;
+      outline: none;
+    }
+
+    .field:focus,
+    .select:focus,
+    .textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(15, 94, 233, 0.12);
+    }
+
+    .textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .row > * {
+      flex: 1 1 180px;
+      min-width: 0;
+    }
+
+    .btn {
+      border: none;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      transition: transform 0.08s ease, opacity 0.2s ease;
+    }
+
+    .btn:active { transform: translateY(1px); }
+
+    .btn-primary {
+      color: #fff;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      box-shadow: 0 10px 18px rgba(15, 94, 233, 0.22);
+    }
+
+    .btn-soft {
+      color: var(--text);
+      background: #eef4ff;
+      border: 1px solid var(--line);
+    }
+
+    .btn-danger {
+      color: #fff;
+      background: linear-gradient(90deg, #d04356, #b82e42);
+      box-shadow: 0 10px 18px rgba(184, 46, 66, 0.2);
+    }
+
+    .label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      margin: 0 0 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+    }
+
+    .fine {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 6px 0 0;
+      word-break: break-word;
+    }
+
+    .result {
+      font-size: 13px;
+      min-height: 20px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 740px;
+      background: #fff;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 11px 10px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      color: var(--muted);
+      background: #eef3fb;
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    tbody td {
+      padding: 10px;
+      font-size: 13px;
+      border-bottom: 1px solid #eaf0f9;
+      vertical-align: top;
+    }
+
+    tbody tr:hover { background: #f8fbff; }
+
+    .muted-cell {
+      color: var(--muted);
+      text-align: center;
+      padding: 18px 10px;
+    }
+
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .title-row { flex-direction: column; align-items: flex-start; }
+      .metrics { width: 100%; grid-template-columns: 1fr 1fr; }
+      .status { max-width: 100%; }
+    }
+
+    @media (max-width: 640px) {
+      .container { padding: 0 10px 18px; margin-top: 12px; }
+      .panel { padding: 12px; border-radius: 14px; }
+      .brand { font-size: 17px; }
+      .title { font-size: 18px; }
+      .row > * { flex-basis: 100%; }
+      .metrics { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <header>Discord Ticket Dashboard</header>
-  <main>
-    <section class="card">
+  <header class="topbar">
+    <div class="brand">Discord Ticket Dashboard</div>
+    <div id="statusText" class="status">토큰을 입력해 시작하세요.</div>
+  </header>
+
+  <main class="container">
+    <section class="panel">
+      <div class="title-row">
+        <div>
+          <h1 class="title">Control Center</h1>
+          <p id="endpointHint" class="hint">현재 접속 주소 기준으로 API를 호출합니다.</p>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="k">Open Tickets</div>
+            <div id="openCount" class="v">0</div>
+          </div>
+          <div class="metric">
+            <div class="k">Closed Tickets</div>
+            <div id="closedCount" class="v">0</div>
+          </div>
+        </div>
+      </div>
+
       <div class="row">
-        <input id="token" placeholder="DASHBOARD_TOKEN" style="min-width:260px" />
-        <button id="saveToken">토큰 저장</button>
-        <select id="guild"></select>
-        <button id="load">불러오기</button>
+        <input id="token" class="field" placeholder="DASHBOARD_TOKEN" autocomplete="off" />
+        <button id="saveToken" class="btn btn-primary">토큰 저장</button>
+        <select id="guild" class="select"></select>
+        <button id="load" class="btn btn-soft">데이터 새로고침</button>
       </div>
-      <p class="muted">같은 PC에서 <code>http://localhost:8787</code> 접속 후 사용하세요.</p>
+      <p class="fine">토큰은 이 브라우저(localStorage)에 저장됩니다.</p>
     </section>
 
-    <section class="card">
-      <h3>관리자 권한</h3>
-      <div class="row">
-        <select id="memberSelect"></select>
-        <button id="addManagerUser">사용자 추가</button>
-        <button id="removeManagerUser" class="ghost">사용자 제거</button>
+    <section class="grid">
+      <div class="stack">
+        <section class="panel">
+          <h2 class="title" style="font-size:18px; margin-bottom:10px;">관리자 권한</h2>
+          <p class="label">사용자 매니저</p>
+          <div class="row">
+            <select id="memberSelect" class="select"></select>
+            <button id="addManagerUser" class="btn btn-primary">사용자 추가</button>
+            <button id="removeManagerUser" class="btn btn-danger">사용자 제거</button>
+          </div>
+
+          <p class="label" style="margin-top:10px;">역할 매니저</p>
+          <div class="row">
+            <select id="roleSelect" class="select"></select>
+            <button id="addManagerRole" class="btn btn-primary">역할 추가</button>
+            <button id="removeManagerRole" class="btn btn-danger">역할 제거</button>
+          </div>
+          <p id="managerSummary" class="fine"></p>
+        </section>
+
+        <section class="panel">
+          <h2 class="title" style="font-size:18px; margin-bottom:10px;">임베드 공지 전송</h2>
+          <p class="label">채널</p>
+          <select id="embedChannel" class="select"></select>
+
+          <div class="row" style="margin-top:10px;">
+            <input id="embedTitle" class="field" placeholder="제목" />
+            <input id="embedColor" class="field" value="#2b8cff" />
+          </div>
+
+          <p class="label" style="margin-top:10px;">내용</p>
+          <textarea id="embedDesc" class="textarea" placeholder="공지 내용을 입력하세요"></textarea>
+          <div class="row" style="margin-top:10px;">
+            <button id="sendEmbed" class="btn btn-primary">임베드 전송</button>
+          </div>
+          <p id="embedResult" class="result"></p>
+        </section>
       </div>
-      <div class="row" style="margin-top:8px">
-        <select id="roleSelect"></select>
-        <button id="addManagerRole">역할 추가</button>
-        <button id="removeManagerRole" class="ghost">역할 제거</button>
+
+      <div class="stack">
+        <section class="panel">
+          <h2 class="title" style="font-size:18px; margin-bottom:10px;">Open Tickets</h2>
+          <div class="table-wrap">
+            <table id="openTable">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Type</th>
+                  <th>Owner</th>
+                  <th>Channel</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2 class="title" style="font-size:18px; margin-bottom:10px;">Closed Tickets</h2>
+          <div class="table-wrap">
+            <table id="closedTable">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Type</th>
+                  <th>Owner</th>
+                  <th>Closed</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
       </div>
-      <p id="managerSummary" class="muted"></p>
-    </section>
-
-    <section class="card">
-      <h3>임베드 공지 전송</h3>
-      <div class="row"><select id="embedChannel" style="min-width:260px"></select></div>
-      <div class="row"><input id="embedTitle" placeholder="제목" style="min-width:260px" /><input id="embedColor" value="#2b8cff" style="width:110px" /></div>
-      <textarea id="embedDesc" placeholder="공지 내용"></textarea>
-      <div class="row"><button id="sendEmbed">임베드 전송</button><span id="embedResult" class="muted"></span></div>
-    </section>
-
-    <section class="card">
-      <h3>Open Tickets</h3>
-      <table id="openTable"><thead><tr><th>No</th><th>Type</th><th>Owner</th><th>Channel</th><th>Created</th></tr></thead><tbody></tbody></table>
-    </section>
-
-    <section class="card">
-      <h3>Closed Tickets</h3>
-      <table id="closedTable"><thead><tr><th>No</th><th>Type</th><th>Owner</th><th>Closed</th><th>Reason</th></tr></thead><tbody></tbody></table>
     </section>
   </main>
+
   <script src="/app.js"></script>
 </body>
 </html>

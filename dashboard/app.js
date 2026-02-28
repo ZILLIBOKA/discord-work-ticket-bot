@@ -10,6 +10,15 @@ if (state.token) {
   $('token').value = state.token;
 }
 
+$('endpointHint').textContent = `현재 대시보드 엔드포인트: ${window.location.origin}`;
+
+function setStatus(message, type = 'info') {
+  const el = $('statusText');
+  el.textContent = message;
+  el.style.borderColor = type === 'error' ? 'rgba(209, 58, 73, 0.45)' : 'rgba(255, 255, 255, 0.25)';
+  el.style.color = type === 'error' ? '#ffd9de' : '#dbe9ff';
+}
+
 function authHeaders() {
   return { 'x-dashboard-token': state.token, 'content-type': 'application/json' };
 }
@@ -22,6 +31,7 @@ async function api(path, options = {}) {
       ...authHeaders()
     }
   });
+
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `HTTP ${res.status}`);
@@ -35,8 +45,19 @@ function fmt(ts) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-function fillSelect(el, rows, labelKey = 'name') {
+function fillSelect(el, rows, labelKey = 'name', emptyText = '선택 가능한 항목 없음') {
   el.innerHTML = '';
+
+  if (!rows || rows.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = emptyText;
+    el.appendChild(opt);
+    el.disabled = true;
+    return;
+  }
+
+  el.disabled = false;
   for (const row of rows) {
     const opt = document.createElement('option');
     opt.value = row.id;
@@ -45,87 +66,167 @@ function fillSelect(el, rows, labelKey = 'name') {
   }
 }
 
+function renderEmptyRow(tbody, colCount, text) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td colspan="${colCount}" class="muted-cell">${text}</td>`;
+  tbody.appendChild(tr);
+}
+
 function renderTables() {
   const openBody = $('openTable').querySelector('tbody');
   const closedBody = $('closedTable').querySelector('tbody');
   openBody.innerHTML = '';
   closedBody.innerHTML = '';
 
-  for (const t of state.data.openTickets || []) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${t.ownerTag || t.ownerId}</td><td>${t.channelName}</td><td>${fmt(t.createdAt)}</td>`;
-    openBody.appendChild(tr);
+  const openTickets = state.data.openTickets || [];
+  const closedTickets = state.data.closedTickets || [];
+
+  $('openCount').textContent = String(openTickets.length);
+  $('closedCount').textContent = String(closedTickets.length);
+
+  if (openTickets.length === 0) {
+    renderEmptyRow(openBody, 5, '열린 티켓이 없습니다.');
+  } else {
+    for (const t of openTickets) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${t.ownerTag || t.ownerId}</td><td>${t.channelName}</td><td>${fmt(t.createdAt)}</td>`;
+      openBody.appendChild(tr);
+    }
   }
 
-  for (const t of state.data.closedTickets || []) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${t.ownerTag || t.ownerId}</td><td>${fmt(t.closedAt)}</td><td>${t.closeReason || '-'}</td>`;
-    closedBody.appendChild(tr);
+  if (closedTickets.length === 0) {
+    renderEmptyRow(closedBody, 5, '닫힌 티켓 이력이 없습니다.');
+  } else {
+    for (const t of closedTickets) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${t.ownerTag || t.ownerId}</td><td>${fmt(t.closedAt)}</td><td>${t.closeReason || '-'}</td>`;
+      closedBody.appendChild(tr);
+    }
   }
 }
 
 async function loadGuilds() {
   const data = await api('/api/guilds');
-  fillSelect($('guild'), data.guilds);
-  if (!state.guildId && data.guilds[0]) {
-    state.guildId = data.guilds[0].id;
+  const guilds = data.guilds || [];
+
+  fillSelect($('guild'), guilds, 'name', '접근 가능한 길드가 없습니다');
+  if (!state.guildId && guilds[0]) {
+    state.guildId = guilds[0].id;
     $('guild').value = state.guildId;
+  }
+
+  if (guilds.length === 0) {
+    throw new Error('길드 목록이 비어 있습니다. 봇 초대/권한을 확인하세요.');
   }
 }
 
 async function loadData() {
   state.guildId = $('guild').value;
-  if (!state.guildId) return;
-  state.data = await api(`/api/guilds/${state.guildId}/data`);
-  fillSelect($('memberSelect'), state.data.memberOptions || []);
-  fillSelect($('roleSelect'), state.data.roleOptions || []);
-  fillSelect($('embedChannel'), state.data.textChannels || []);
-  $('managerSummary').textContent = `사용자: ${(state.data.managerUsers || []).map((x) => x.label).join(', ') || '없음'} | 역할: ${(state.data.managerRoles || []).map((x) => x.label).join(', ') || '없음'}`;
+  if (!state.guildId) {
+    throw new Error('길드를 먼저 선택하세요.');
+  }
+
+  const data = await api(`/api/guilds/${state.guildId}/data`);
+  state.data = data;
+
+  fillSelect($('memberSelect'), data.memberOptions || [], 'name', '멤버 목록 없음 (ID 수동 관리 권장)');
+  fillSelect($('roleSelect'), data.roleOptions || [], 'name', '역할 목록 없음');
+  fillSelect($('embedChannel'), data.textChannels || [], 'name', '텍스트 채널 없음');
+
+  $('managerSummary').textContent = `사용자: ${(data.managerUsers || []).map((x) => x.label).join(', ') || '없음'} | 역할: ${(data.managerRoles || []).map((x) => x.label).join(', ') || '없음'}`;
   renderTables();
+  setStatus(`길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료`);
 }
 
 async function updateManager(kind, action) {
   const id = kind === 'users' ? $('memberSelect').value : $('roleSelect').value;
-  if (!id) return;
+  if (!id) {
+    setStatus('선택 가능한 항목이 없어 작업을 건너뜁니다.', 'error');
+    return;
+  }
+
   const body = kind === 'users' ? { action, userId: id } : { action, roleId: id };
-  await api(`/api/guilds/${state.guildId}/manager-${kind}`, { method: 'POST', body: JSON.stringify(body) });
+  await api(`/api/guilds/${state.guildId}/manager-${kind}`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+
   await loadData();
 }
 
 $('saveToken').addEventListener('click', async () => {
-  state.token = $('token').value.trim();
-  localStorage.setItem('dashboardToken', state.token);
-  await loadGuilds();
-  await loadData();
+  try {
+    state.token = $('token').value.trim();
+    if (!state.token) {
+      setStatus('토큰을 입력하세요.', 'error');
+      return;
+    }
+    localStorage.setItem('dashboardToken', state.token);
+    await loadGuilds();
+    await loadData();
+  } catch (error) {
+    setStatus(`토큰 저장 실패: ${error.message}`, 'error');
+  }
 });
 
-$('load').addEventListener('click', loadData);
-$('guild').addEventListener('change', loadData);
-$('addManagerUser').addEventListener('click', () => updateManager('users', 'add'));
-$('removeManagerUser').addEventListener('click', () => updateManager('users', 'remove'));
-$('addManagerRole').addEventListener('click', () => updateManager('roles', 'add'));
-$('removeManagerRole').addEventListener('click', () => updateManager('roles', 'remove'));
+$('load').addEventListener('click', async () => {
+  try {
+    await loadData();
+  } catch (error) {
+    setStatus(`불러오기 실패: ${error.message}`, 'error');
+  }
+});
+
+$('guild').addEventListener('change', async () => {
+  try {
+    await loadData();
+  } catch (error) {
+    setStatus(`길드 변경 실패: ${error.message}`, 'error');
+  }
+});
+
+$('addManagerUser').addEventListener('click', () => updateManager('users', 'add').catch((e) => setStatus(`사용자 추가 실패: ${e.message}`, 'error')));
+$('removeManagerUser').addEventListener('click', () => updateManager('users', 'remove').catch((e) => setStatus(`사용자 제거 실패: ${e.message}`, 'error')));
+$('addManagerRole').addEventListener('click', () => updateManager('roles', 'add').catch((e) => setStatus(`역할 추가 실패: ${e.message}`, 'error')));
+$('removeManagerRole').addEventListener('click', () => updateManager('roles', 'remove').catch((e) => setStatus(`역할 제거 실패: ${e.message}`, 'error')));
 
 $('sendEmbed').addEventListener('click', async () => {
-  $('embedResult').textContent = '전송중...';
+  $('embedResult').textContent = '전송 중...';
   try {
     const payload = {
       channelId: $('embedChannel').value,
-      title: $('embedTitle').value,
-      description: $('embedDesc').value,
-      color: $('embedColor').value
+      title: $('embedTitle').value.trim(),
+      description: $('embedDesc').value.trim(),
+      color: $('embedColor').value.trim() || '#2b8cff'
     };
-    const result = await api(`/api/guilds/${state.guildId}/embed`, { method: 'POST', body: JSON.stringify(payload) });
+
+    if (!payload.channelId || !payload.title || !payload.description) {
+      throw new Error('채널, 제목, 내용을 모두 입력하세요.');
+    }
+
+    const result = await api(`/api/guilds/${state.guildId}/embed`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
     $('embedResult').textContent = `전송 완료 (messageId: ${result.messageId})`;
+    $('embedResult').style.color = '#128058';
   } catch (error) {
-    $('embedResult').textContent = `실패: ${error.message}`;
+    $('embedResult').textContent = `전송 실패: ${error.message}`;
+    $('embedResult').style.color = '#d13a49';
   }
 });
 
 (async () => {
-  if (!state.token) return;
+  if (!state.token) {
+    setStatus('토큰을 입력해 연결하세요.');
+    return;
+  }
+
   try {
     await loadGuilds();
     await loadData();
-  } catch (_error) {}
+  } catch (error) {
+    setStatus(`초기 로드 실패: ${error.message}`, 'error');
+  }
 })();
