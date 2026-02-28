@@ -755,6 +755,7 @@ async function registerSlashCommands(clientInstance) {
 function serializeTicket(guild, channelId, ticket) {
   const channel = guild.channels.cache.get(channelId);
   const summary = buildTicketSummary(ticket);
+  const claimedMember = ticket && ticket.claimedBy ? guild.members.cache.get(String(ticket.claimedBy)) : null;
   return {
     channelId,
     channelName: channel ? channel.name : ticket.channelName || '(deleted)',
@@ -765,6 +766,7 @@ function serializeTicket(guild, channelId, ticket) {
     ownerTag: ticket.ownerTag || '',
     status: ticket.status || 'open',
     claimedBy: ticket.claimedBy || '',
+    claimedByTag: claimedMember && claimedMember.user ? claimedMember.user.tag : '',
     createdAt: ticket.createdAt || 0,
     closedAt: ticket.closedAt || null,
     closeReason: ticket.closeReason || '',

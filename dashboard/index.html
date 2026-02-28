@@ -238,6 +238,33 @@
       color: var(--muted);
       margin-top: 6px;
     }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--line);
+      background: #eef4ff;
+      color: #1f3f78;
+    }
+    .chip.warn {
+      color: #8a4b00;
+      background: #fff6ea;
+      border-color: #ffd5a0;
+    }
+    .chip.ok {
+      color: #0d6d4c;
+      background: #e9fbf3;
+      border-color: #bdebd7;
+    }
+    .filters {
+      display: grid;
+      grid-template-columns: 220px 1fr 160px;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
 
     .table-wrap {
       overflow: auto;
@@ -295,6 +322,7 @@
       .title { font-size: 18px; }
       .row > * { flex-basis: 100%; }
       .metrics { grid-template-columns: 1fr; }
+      .filters { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -328,6 +356,16 @@
         <button id="saveToken" class="btn btn-primary">토큰 저장</button>
         <select id="guild" class="select"></select>
         <button id="load" class="btn btn-soft">데이터 새로고침</button>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <label class="chip"><input id="liveToggle" type="checkbox" checked style="margin-right:6px;" /> 라이브 자동새로고침</label>
+        <select id="liveInterval" class="select" style="max-width:220px;">
+          <option value="5000">5초</option>
+          <option value="10000" selected>10초</option>
+          <option value="20000">20초</option>
+          <option value="30000">30초</option>
+        </select>
+        <span id="lastSync" class="fine">마지막 동기화: -</span>
       </div>
       <p class="fine">토큰은 이 브라우저(localStorage)에 저장됩니다.</p>
     </section>
@@ -380,6 +418,7 @@
                 <tr>
                   <th>No</th>
                   <th>Type</th>
+                  <th>Status</th>
                   <th>Owner</th>
                   <th>Channel</th>
                   <th>Created</th>
@@ -392,6 +431,17 @@
 
         <section class="panel">
           <h2 class="title" style="font-size:18px; margin-bottom:10px;">Closed Tickets</h2>
+          <div class="filters">
+            <select id="historyType" class="select">
+              <option value="all">전체 타입</option>
+              <option value="job">Job Ticket</option>
+              <option value="material_use">Material Use Ticket</option>
+              <option value="defected_material">Defected Material Ticket</option>
+              <option value="general">General Ticket</option>
+            </select>
+            <input id="historySearch" class="field" placeholder="Owner/채널/사유 검색" />
+            <button id="historyClear" class="btn btn-soft">필터 초기화</button>
+          </div>
           <div class="table-wrap">
             <table id="closedTable">
               <thead>

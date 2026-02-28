@@ -3,7 +3,8 @@ const $ = (id) => document.getElementById(id);
 const state = {
   token: localStorage.getItem('dashboardToken') || '',
   guildId: '',
-  data: null
+  data: null,
+  refreshTimer: null
 };
 
 if (state.token) {
@@ -17,6 +18,11 @@ function setStatus(message, type = 'info') {
   el.textContent = message;
   el.style.borderColor = type === 'error' ? 'rgba(209, 58, 73, 0.45)' : 'rgba(255, 255, 255, 0.25)';
   el.style.color = type === 'error' ? '#ffd9de' : '#dbe9ff';
+}
+
+function setLastSync() {
+  const d = new Date();
+  $('lastSync').textContent = `마지막 동기화: ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
 function authHeaders() {
@@ -72,6 +78,31 @@ function renderEmptyRow(tbody, colCount, text) {
   tbody.appendChild(tr);
 }
 
+function ticketStatusChip(t) {
+  if (t.claimedBy) {
+    const who = t.claimedByTag || t.claimedBy;
+    return `<span class="chip ok">Claimed · ${who}</span>`;
+  }
+  return '<span class="chip warn">Open · Unassigned</span>';
+}
+
+function getFilteredClosedTickets(list) {
+  const type = $('historyType').value;
+  const search = $('historySearch').value.trim().toLowerCase();
+  return (list || []).filter((t) => {
+    if (type !== 'all' && t.ticketType !== type) {
+      return false;
+    }
+    if (!search) {
+      return true;
+    }
+    const target = [t.ownerTag, t.ownerId, t.channelName, t.closeReason, t.ticketTypeLabel]
+      .map((x) => String(x || '').toLowerCase())
+      .join(' ');
+    return target.includes(search);
+  });
+}
+
 function renderTables() {
   const openBody = $('openTable').querySelector('tbody');
   const closedBody = $('closedTable').querySelector('tbody');
@@ -80,24 +111,25 @@ function renderTables() {
 
   const openTickets = state.data.openTickets || [];
   const closedTickets = state.data.closedTickets || [];
+  const filteredClosed = getFilteredClosedTickets(closedTickets);
 
   $('openCount').textContent = String(openTickets.length);
   $('closedCount').textContent = String(closedTickets.length);
 
   if (openTickets.length === 0) {
-    renderEmptyRow(openBody, 5, '열린 티켓이 없습니다.');
+    renderEmptyRow(openBody, 6, '열린 티켓이 없습니다.');
   } else {
     for (const t of openTickets) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${t.ownerTag || t.ownerId}</td><td>${t.channelName}</td><td>${fmt(t.createdAt)}</td>`;
+      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${ticketStatusChip(t)}</td><td>${t.ownerTag || t.ownerId}</td><td>${t.channelName}</td><td>${fmt(t.createdAt)}</td>`;
       openBody.appendChild(tr);
     }
   }
 
-  if (closedTickets.length === 0) {
-    renderEmptyRow(closedBody, 5, '닫힌 티켓 이력이 없습니다.');
+  if (filteredClosed.length === 0) {
+    renderEmptyRow(closedBody, 5, '조건에 맞는 닫힌 티켓이 없습니다.');
   } else {
-    for (const t of closedTickets) {
+    for (const t of filteredClosed) {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${t.ownerTag || t.ownerId}</td><td>${fmt(t.closedAt)}</td><td>${t.closeReason || '-'}</td>`;
       closedBody.appendChild(tr);
@@ -135,7 +167,31 @@ async function loadData() {
 
   $('managerSummary').textContent = `사용자: ${(data.managerUsers || []).map((x) => x.label).join(', ') || '없음'} | 역할: ${(data.managerRoles || []).map((x) => x.label).join(', ') || '없음'}`;
   renderTables();
+  setLastSync();
   setStatus(`길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료`);
+}
+
+function restartAutoRefresh() {
+  if (state.refreshTimer) {
+    clearInterval(state.refreshTimer);
+    state.refreshTimer = null;
+  }
+
+  if (!$('liveToggle').checked) {
+    return;
+  }
+
+  const interval = Math.max(3000, Number($('liveInterval').value || 10000));
+  state.refreshTimer = setInterval(async () => {
+    if (!state.token || !state.guildId) {
+      return;
+    }
+    try {
+      await loadData();
+    } catch (error) {
+      setStatus(`라이브 동기화 실패: ${error.message}`, 'error');
+    }
+  }, interval);
 }
 
 async function updateManager(kind, action) {
@@ -164,6 +220,7 @@ $('saveToken').addEventListener('click', async () => {
     localStorage.setItem('dashboardToken', state.token);
     await loadGuilds();
     await loadData();
+    restartAutoRefresh();
   } catch (error) {
     setStatus(`토큰 저장 실패: ${error.message}`, 'error');
   }
@@ -183,6 +240,17 @@ $('guild').addEventListener('change', async () => {
   } catch (error) {
     setStatus(`길드 변경 실패: ${error.message}`, 'error');
   }
+});
+
+$('liveToggle').addEventListener('change', restartAutoRefresh);
+$('liveInterval').addEventListener('change', restartAutoRefresh);
+
+$('historyType').addEventListener('change', renderTables);
+$('historySearch').addEventListener('input', renderTables);
+$('historyClear').addEventListener('click', () => {
+  $('historyType').value = 'all';
+  $('historySearch').value = '';
+  renderTables();
 });
 
 $('addManagerUser').addEventListener('click', () => updateManager('users', 'add').catch((e) => setStatus(`사용자 추가 실패: ${e.message}`, 'error')));
@@ -226,6 +294,7 @@ $('sendEmbed').addEventListener('click', async () => {
   try {
     await loadGuilds();
     await loadData();
+    restartAutoRefresh();
   } catch (error) {
     setStatus(`초기 로드 실패: ${error.message}`, 'error');
   }
