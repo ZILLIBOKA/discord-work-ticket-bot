@@ -2,13 +2,19 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   token: localStorage.getItem('dashboardToken') || '',
+  masterToken: localStorage.getItem('masterDashboardToken') || '',
   guildId: '',
   data: null,
-  refreshTimer: null
+  masterData: null,
+  refreshTimer: null,
+  activeTab: 'ops'
 };
 
 if (state.token) {
   $('token').value = state.token;
+}
+if (state.masterToken) {
+  $('masterToken').value = state.masterToken;
 }
 
 $('endpointHint').textContent = `현재 대시보드 엔드포인트: ${window.location.origin}`;
@@ -29,12 +35,32 @@ function authHeaders() {
   return { 'x-dashboard-token': state.token, 'content-type': 'application/json' };
 }
 
+function masterAuthHeaders() {
+  return { 'x-master-token': state.masterToken, 'content-type': 'application/json' };
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
     headers: {
       ...(options.headers || {}),
       ...authHeaders()
+    }
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function apiMaster(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...masterAuthHeaders()
     }
   });
 
@@ -109,6 +135,15 @@ function renderEmptyRow(tbody, colCount, text) {
   tbody.appendChild(tr);
 }
 
+function switchTab(tab) {
+  state.activeTab = tab === 'master' ? 'master' : 'ops';
+  const opsActive = state.activeTab === 'ops';
+  $('opsSection').style.display = opsActive ? '' : 'none';
+  $('masterSection').style.display = opsActive ? 'none' : '';
+  $('opsTabBtn').classList.toggle('active', opsActive);
+  $('masterTabBtn').classList.toggle('active', !opsActive);
+}
+
 function ticketStatusChip(t) {
   if (t.claimedBy) {
     const who = t.claimedByTag || t.claimedBy;
@@ -167,6 +202,80 @@ function renderTables() {
       closedBody.appendChild(tr);
     }
   }
+}
+
+function renderMasterTable() {
+  const tbody = $('masterGuildTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  const guilds = (state.masterData && state.masterData.guilds) || [];
+  if (guilds.length === 0) {
+    renderEmptyRow(tbody, 6, '마스터 데이터가 없습니다.');
+    return;
+  }
+
+  for (const g of guilds) {
+    const tr = document.createElement('tr');
+    const managerText = `${g.managerUsers || 0} users / ${g.managerRoles || 0} roles`;
+    const toggleLabel = g.ticketEnabled ? 'OFF' : 'ON';
+    const toggleClass = g.ticketEnabled ? 'btn-danger' : 'btn-primary';
+    tr.innerHTML = `<td>${escapeHtml(g.guildName)}</td><td>${g.ticketEnabled ? '<span class="chip ok">ON</span>' : '<span class="chip warn">OFF</span>'}</td><td>${g.openTickets || 0}</td><td>${g.closedTickets || 0}</td><td>${escapeHtml(managerText)}</td><td><button class="btn ${toggleClass}" data-master-toggle="${escapeHtml(g.guildId)}">${toggleLabel}</button></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function fillMasterGuildSelect() {
+  const guildRows = (state.masterData && state.masterData.guilds ? state.masterData.guilds : []).map((g) => ({
+    id: g.guildId,
+    name: g.guildName
+  }));
+  const savedMasterGuild = localStorage.getItem('masterManagerGuildId') || '';
+  fillSelect($('masterManagerGuild'), guildRows, 'name', '길드 없음', savedMasterGuild);
+  if ($('masterManagerGuild').value) {
+    localStorage.setItem('masterManagerGuildId', $('masterManagerGuild').value);
+  }
+}
+
+async function loadMasterData() {
+  const data = await apiMaster('/api/master/overview');
+  state.masterData = data;
+  const botTag = data.bot && data.bot.tag ? data.bot.tag : '-';
+  const guildCount = data.bot && Number.isInteger(data.bot.guildCount) ? data.bot.guildCount : 0;
+  const totalOpen = data.summary && Number.isInteger(data.summary.totalOpen) ? data.summary.totalOpen : 0;
+  const totalClosed = data.summary && Number.isInteger(data.summary.totalClosed) ? data.summary.totalClosed : 0;
+  $('masterSummary').textContent = `Bot: ${botTag} | Guilds: ${guildCount} | Open: ${totalOpen} | Closed: ${totalClosed}`;
+  fillMasterGuildSelect();
+  renderMasterTable();
+}
+
+async function masterToggleAll(enabled) {
+  await apiMaster('/api/master/tickets-enabled', {
+    method: 'POST',
+    body: JSON.stringify({ enabled: !!enabled })
+  });
+  await loadMasterData();
+}
+
+async function masterToggleGuild(guildId, enabled) {
+  await apiMaster(`/api/master/guilds/${guildId}/tickets-enabled`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled: !!enabled })
+  });
+  await loadMasterData();
+}
+
+async function masterUpdateManagerUser(action) {
+  const guildId = String($('masterManagerGuild').value || '').trim();
+  const userId = String($('masterManagerUserId').value || '').trim();
+  if (!guildId || !userId) {
+    throw new Error('길드와 사용자 ID를 입력하세요.');
+  }
+
+  await apiMaster(`/api/master/guilds/${guildId}/manager-users`, {
+    method: 'POST',
+    body: JSON.stringify({ action, userId })
+  });
+  $('masterManagerUserId').value = '';
+  await loadMasterData();
 }
 
 async function loadGuilds() {
@@ -279,11 +388,33 @@ $('saveToken').addEventListener('click', async () => {
   }
 });
 
+$('saveMasterToken').addEventListener('click', async () => {
+  try {
+    state.masterToken = $('masterToken').value.trim();
+    if (!state.masterToken) {
+      throw new Error('마스터 토큰을 입력하세요.');
+    }
+    localStorage.setItem('masterDashboardToken', state.masterToken);
+    await loadMasterData();
+    setStatus('마스터 토큰 저장 및 검증 완료');
+  } catch (error) {
+    setStatus(`마스터 토큰 실패: ${error.message}`, 'error');
+  }
+});
+
 $('load').addEventListener('click', async () => {
   try {
     await loadData();
   } catch (error) {
     setStatus(`불러오기 실패: ${error.message}`, 'error');
+  }
+});
+
+$('loadMaster').addEventListener('click', async () => {
+  try {
+    await loadMasterData();
+  } catch (error) {
+    setStatus(`마스터 로드 실패: ${error.message}`, 'error');
   }
 });
 
@@ -295,6 +426,10 @@ $('guild').addEventListener('change', async () => {
   }
 });
 
+$('masterManagerGuild').addEventListener('change', () => {
+  localStorage.setItem('masterManagerGuildId', $('masterManagerGuild').value || '');
+});
+
 $('embedChannel').addEventListener('change', () => {
   if (!state.guildId) {
     return;
@@ -304,6 +439,8 @@ $('embedChannel').addEventListener('change', () => {
 
 $('liveToggle').addEventListener('change', restartAutoRefresh);
 $('liveInterval').addEventListener('change', restartAutoRefresh);
+$('opsTabBtn').addEventListener('click', () => switchTab('ops'));
+$('masterTabBtn').addEventListener('click', () => switchTab('master'));
 
 $('historyType').addEventListener('change', renderTables);
 $('historySearch').addEventListener('input', renderTables);
@@ -317,6 +454,55 @@ $('addManagerUser').addEventListener('click', () => updateManager('users', 'add'
 $('removeManagerUser').addEventListener('click', () => updateManager('users', 'remove').catch((e) => setStatus(`사용자 제거 실패: ${e.message}`, 'error')));
 $('addManagerRole').addEventListener('click', () => updateManager('roles', 'add').catch((e) => setStatus(`역할 추가 실패: ${e.message}`, 'error')));
 $('removeManagerRole').addEventListener('click', () => updateManager('roles', 'remove').catch((e) => setStatus(`역할 제거 실패: ${e.message}`, 'error')));
+
+$('masterEnableAll').addEventListener('click', async () => {
+  try {
+    await masterToggleAll(true);
+  } catch (error) {
+    setStatus(`전체 ON 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterDisableAll').addEventListener('click', async () => {
+  try {
+    await masterToggleAll(false);
+  } catch (error) {
+    setStatus(`전체 OFF 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterAddManagerUser').addEventListener('click', async () => {
+  try {
+    await masterUpdateManagerUser('add');
+  } catch (error) {
+    setStatus(`마스터 사용자 추가 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterRemoveManagerUser').addEventListener('click', async () => {
+  try {
+    await masterUpdateManagerUser('remove');
+  } catch (error) {
+    setStatus(`마스터 사용자 제거 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterGuildTable').addEventListener('click', async (ev) => {
+  const target = ev.target;
+  if (!target || !target.dataset || !target.dataset.masterToggle) {
+    return;
+  }
+  const guildId = target.dataset.masterToggle;
+  const guild = (state.masterData && state.masterData.guilds || []).find((g) => g.guildId === guildId);
+  if (!guild) {
+    return;
+  }
+  try {
+    await masterToggleGuild(guildId, !guild.ticketEnabled);
+  } catch (error) {
+    setStatus(`길드 티켓 상태 변경 실패: ${error.message}`, 'error');
+  }
+});
 
 $('sendEmbed').addEventListener('click', async () => {
   $('embedResult').textContent = '전송 중...';
@@ -348,16 +534,25 @@ $('sendEmbed').addEventListener('click', async () => {
 });
 
 (async () => {
+  switchTab('ops');
+
   if (!state.token) {
     setStatus('토큰을 입력해 연결하세요.');
-    return;
+  } else {
+    try {
+      await loadGuilds();
+      await loadData();
+      restartAutoRefresh();
+    } catch (error) {
+      setStatus(`초기 로드 실패: ${error.message}`, 'error');
+    }
   }
 
-  try {
-    await loadGuilds();
-    await loadData();
-    restartAutoRefresh();
-  } catch (error) {
-    setStatus(`초기 로드 실패: ${error.message}`, 'error');
+  if (state.masterToken) {
+    try {
+      await loadMasterData();
+    } catch (_error) {
+      // silent: user can reload manually
+    }
   }
 })();

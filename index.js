@@ -39,6 +39,7 @@ const GOOGLE_SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '
 const GOOGLE_SERVICE_ACCOUNT_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_FILE || '';
 const DASHBOARD_PORT = Number(process.env.DASHBOARD_PORT || 8787);
 const DASHBOARD_TOKEN = String(process.env.DASHBOARD_TOKEN || '').trim();
+const MASTER_DASHBOARD_TOKEN = String(process.env.MASTER_DASHBOARD_TOKEN || '').trim();
 const SLASH_GUILD_ID = String(process.env.SLASH_GUILD_ID || '').trim();
 const ENABLE_GUILD_MEMBERS_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_GUILD_MEMBERS_INTENT || 'false'));
 const ENABLE_MESSAGE_CONTENT_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_MESSAGE_CONTENT_INTENT || 'false'));
@@ -675,6 +676,19 @@ function requireDashboardToken(req, res, next) {
   next();
 }
 
+function requireMasterDashboardToken(req, res, next) {
+  if (!MASTER_DASHBOARD_TOKEN) {
+    return res.status(503).json({ error: 'Master dashboard token is not configured' });
+  }
+  const fromHeader = String(req.headers['x-master-token'] || '').trim();
+  const fromQuery = String(req.query.masterToken || '').trim();
+  const token = fromHeader || fromQuery;
+  if (token !== MASTER_DASHBOARD_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
 function buildTicketStatusLines(guildState) {
   const openCount = Object.values(guildState.ticketChannels).filter((t) => t.status === 'open').length;
   const supportRole = guildState.tickets.supportRoleId ? `<@&${guildState.tickets.supportRoleId}>` : 'Not set';
@@ -922,6 +936,91 @@ function startDashboardServer() {
       roleStats: {
         selectableRoles: safeRoleOptions.length
       }
+    });
+  });
+
+  app.get('/api/master/overview', requireMasterDashboardToken, async (_req, res) => {
+    const guildRows = [];
+    for (const guild of client.guilds.cache.values()) {
+      const guildState = ensureGuild(guild.id);
+      const openCount = Object.values(guildState.ticketChannels || {}).filter((t) => t.status === 'open').length;
+      const closedCount = Array.isArray(guildState.tickets.history) ? guildState.tickets.history.length : 0;
+      guildRows.push({
+        guildId: guild.id,
+        guildName: guild.name,
+        ticketEnabled: guildState.tickets.enabled !== false,
+        openTickets: openCount,
+        closedTickets: closedCount,
+        managerUsers: Array.isArray(guildState.tickets.managerUserIds) ? guildState.tickets.managerUserIds.length : 0,
+        managerRoles: Array.isArray(guildState.tickets.managerRoleIds) ? guildState.tickets.managerRoleIds.length : 0,
+        managerUserIds: Array.isArray(guildState.tickets.managerUserIds) ? guildState.tickets.managerUserIds : []
+      });
+    }
+    guildRows.sort((a, b) => a.guildName.localeCompare(b.guildName));
+    const totalOpen = guildRows.reduce((acc, row) => acc + row.openTickets, 0);
+    const totalClosed = guildRows.reduce((acc, row) => acc + row.closedTickets, 0);
+    res.json({
+      bot: {
+        tag: client.user ? client.user.tag : 'starting',
+        guildCount: guildRows.length
+      },
+      summary: {
+        totalOpen,
+        totalClosed
+      },
+      guilds: guildRows
+    });
+  });
+
+  app.post('/api/master/guilds/:guildId/tickets-enabled', requireMasterDashboardToken, async (req, res) => {
+    const guild = client.guilds.cache.get(String(req.params.guildId || ''));
+    if (!guild) {
+      return res.status(404).json({ error: 'Guild not found' });
+    }
+    const enabled = !!req.body.enabled;
+    const guildState = ensureGuild(guild.id);
+    guildState.tickets.enabled = enabled;
+    saveDb();
+    res.json({ ok: true, guildId: guild.id, enabled });
+  });
+
+  app.post('/api/master/tickets-enabled', requireMasterDashboardToken, async (req, res) => {
+    const enabled = !!req.body.enabled;
+    const updated = [];
+    for (const guild of client.guilds.cache.values()) {
+      const guildState = ensureGuild(guild.id);
+      guildState.tickets.enabled = enabled;
+      updated.push({ guildId: guild.id, guildName: guild.name, enabled });
+    }
+    saveDb();
+    res.json({ ok: true, updatedCount: updated.length, enabled, updated });
+  });
+
+  app.post('/api/master/guilds/:guildId/manager-users', requireMasterDashboardToken, async (req, res) => {
+    const guild = client.guilds.cache.get(String(req.params.guildId || ''));
+    if (!guild) {
+      return res.status(404).json({ error: 'Guild not found' });
+    }
+    const action = String(req.body.action || '').toLowerCase();
+    const userId = String(req.body.userId || '').trim();
+    if (!userId || (action !== 'add' && action !== 'remove')) {
+      return res.status(400).json({ error: 'Invalid action or userId' });
+    }
+    const guildState = ensureGuild(guild.id);
+    const set = new Set(guildState.tickets.managerUserIds || []);
+    if (action === 'add') {
+      set.add(userId);
+      await applyAccessToOpenTickets(guild, userId, true);
+    } else {
+      set.delete(userId);
+      await applyAccessToOpenTickets(guild, userId, false);
+    }
+    guildState.tickets.managerUserIds = Array.from(set);
+    saveDb();
+    res.json({
+      ok: true,
+      guildId: guild.id,
+      managerUserIds: guildState.tickets.managerUserIds
     });
   });
 
@@ -2154,6 +2253,9 @@ process.on('uncaughtException', (error) => {
 
 if (!DASHBOARD_TOKEN) {
   console.warn('[dashboard] DASHBOARD_TOKEN is empty. API will reject requests until set.');
+}
+if (!MASTER_DASHBOARD_TOKEN) {
+  console.warn('[dashboard] MASTER_DASHBOARD_TOKEN is empty. Master API will be disabled.');
 }
 startDashboardServer();
 
