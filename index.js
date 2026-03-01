@@ -47,6 +47,8 @@ const DISCORD_OAUTH_ENABLED = !!(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET && D
 const TECHNICAL_LEAD_ROLE_ID = String(process.env.TECHNICAL_LEAD_ROLE_ID || '').trim();
 const TECHNICAL_LEAD_ROLE_NAME = String(process.env.TECHNICAL_LEAD_ROLE_NAME || 'Technical Lead').trim();
 const SLASH_GUILD_ID = String(process.env.SLASH_GUILD_ID || '').trim();
+const REGISTER_ALL_GUILD_SLASH_COMMANDS = /^(1|true|yes)$/i.test(String(process.env.REGISTER_ALL_GUILD_SLASH_COMMANDS || 'true'));
+const REGISTER_GLOBAL_SLASH_COMMANDS = /^(1|true|yes)$/i.test(String(process.env.REGISTER_GLOBAL_SLASH_COMMANDS || 'false'));
 const ENABLE_GUILD_MEMBERS_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_GUILD_MEMBERS_INTENT || 'false'));
 const ENABLE_MESSAGE_CONTENT_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_MESSAGE_CONTENT_INTENT || 'false'));
 
@@ -907,8 +909,8 @@ function buildTicketStatusLines(guildState) {
   ];
 }
 
-async function registerSlashCommands(clientInstance) {
-  const commands = [
+function buildSlashCommands() {
+  return [
     new SlashCommandBuilder()
       .setName('open')
       .setDescription('Open a work ticket')
@@ -962,12 +964,27 @@ async function registerSlashCommands(clientInstance) {
       .addUserOption((o) => o.setName('user').setDescription('Target user').setRequired(false))
       .addRoleOption((o) => o.setName('role').setDescription('Target role').setRequired(false))
   ].map((c) => c.toJSON());
+}
 
+async function registerSlashCommands(clientInstance) {
+  const commands = buildSlashCommands();
   const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+  const guildTargetIds = new Set();
   if (SLASH_GUILD_ID) {
-    await rest.put(Routes.applicationGuildCommands(clientInstance.user.id, SLASH_GUILD_ID), { body: commands });
-    console.log(`[slash] registered guild commands to guild=${SLASH_GUILD_ID}`);
-  } else {
+    guildTargetIds.add(SLASH_GUILD_ID);
+  } else if (REGISTER_ALL_GUILD_SLASH_COMMANDS) {
+    for (const guild of clientInstance.guilds.cache.values()) {
+      guildTargetIds.add(guild.id);
+    }
+  }
+
+  for (const guildId of guildTargetIds) {
+    await rest.put(Routes.applicationGuildCommands(clientInstance.user.id, guildId), { body: commands });
+    console.log(`[slash] registered guild commands to guild=${guildId}`);
+  }
+
+  if (!guildTargetIds.size || REGISTER_GLOBAL_SLASH_COMMANDS) {
     await rest.put(Routes.applicationCommands(clientInstance.user.id), { body: commands });
     console.log('[slash] registered global commands');
   }
