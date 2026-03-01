@@ -36,7 +36,18 @@
 ```env
 DISCORD_TOKEN=...
 DASHBOARD_TOKEN=...
-BOT_DATA_PATH=/data/bot-data.json
+
+# 저장소 선택
+STORAGE_BACKEND=supabase
+
+# local 저장(선택)
+BOT_DATA_PATH=./data/bot-data.json
+
+# supabase 저장(권장: 무료 플랜에서도 재배포 후 유지)
+SUPABASE_URL=https://<PROJECT_REF>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY>
+SUPABASE_TABLE=bot_state
+SUPABASE_ROW_ID=global
 
 # Discord OAuth2
 DISCORD_CLIENT_ID=...
@@ -56,7 +67,9 @@ ENABLE_MESSAGE_CONTENT_INTENT=false
 ### 변수 설명
 - `DISCORD_TOKEN`: 봇 로그인 토큰
 - `DASHBOARD_TOKEN`: 일반 Dashboard API 토큰
-- `BOT_DATA_PATH`: 티켓/설정 영구 저장 파일 경로
+- `STORAGE_BACKEND`: `local` 또는 `supabase`
+- `BOT_DATA_PATH`: local 모드 저장 파일 경로
+- `SUPABASE_*`: supabase 모드 저장소 설정
 - `DISCORD_CLIENT_ID/SECRET/REDIRECT_URI`: OAuth 로그인용
 - `TECHNICAL_LEAD_ROLE_ID`: Master 탭 접근 허용 역할 ID(권장)
 - `TECHNICAL_LEAD_ROLE_NAME`: Master 탭 접근 허용 역할명(기본: `Technical Lead`)
@@ -73,8 +86,19 @@ node index.js
 ## 5. Koyeb 배포 기준 순서
 1. GitHub 최신 `main` 배포
 2. Koyeb Service Environment Variables 설정
-3. Koyeb Volume 생성 후 서비스에 마운트(예: `/data`)
-4. 환경변수 `BOT_DATA_PATH=/data/bot-data.json` 설정
+3. Supabase에서 아래 SQL 실행 후 테이블 생성
+```sql
+create table if not exists public.bot_state (
+  id text primary key,
+  data jsonb not null default '{}'::jsonb
+);
+```
+4. 서비스 환경변수 설정
+- `STORAGE_BACKEND=supabase`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_TABLE=bot_state`
+- `SUPABASE_ROW_ID=global`
 5. `DISCORD_REDIRECT_URI`가 실제 Koyeb 도메인과 정확히 일치하는지 확인
 6. Deploy
 7. Dashboard 접속 후

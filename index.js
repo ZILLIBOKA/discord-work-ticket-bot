@@ -53,6 +53,11 @@ const PRUNE_GLOBAL_SLASH_COMMANDS = /^(1|true|yes)$/i.test(String(process.env.PR
 const ENABLE_GUILD_MEMBERS_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_GUILD_MEMBERS_INTENT || 'false'));
 const ENABLE_MESSAGE_CONTENT_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_MESSAGE_CONTENT_INTENT || 'false'));
 const BOT_DATA_PATH = String(process.env.BOT_DATA_PATH || '').trim();
+const STORAGE_BACKEND = String(process.env.STORAGE_BACKEND || 'local').trim().toLowerCase();
+const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
+const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+const SUPABASE_TABLE = String(process.env.SUPABASE_TABLE || 'bot_state').trim();
+const SUPABASE_ROW_ID = String(process.env.SUPABASE_ROW_ID || 'global').trim();
 
 if (!TOKEN) {
   console.error('Missing DISCORD_TOKEN in environment');
@@ -120,13 +125,119 @@ function loadDb() {
   }
 }
 
-function saveDb() {
+function writeLocalDb() {
   try {
     fs.mkdirSync(path.dirname(DATA_PATH), { recursive: true });
     fs.writeFileSync(DATA_PATH, JSON.stringify(db, null, 2), 'utf8');
   } catch (error) {
     console.error('[bot] failed to save DB', error);
   }
+}
+
+function isSupabaseStorageEnabled() {
+  return STORAGE_BACKEND === 'supabase' && !!(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY && SUPABASE_TABLE && SUPABASE_ROW_ID);
+}
+
+function replaceDb(nextDb) {
+  const safe = nextDb && typeof nextDb === 'object' ? nextDb : { guilds: {} };
+  const normalized = {
+    ...safe,
+    guilds: safe.guilds && typeof safe.guilds === 'object' ? safe.guilds : {}
+  };
+  Object.keys(db).forEach((k) => delete db[k]);
+  Object.assign(db, normalized);
+}
+
+function buildSupabaseHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    'Content-Type': 'application/json',
+    ...extra
+  };
+}
+
+async function loadDbFromSupabase() {
+  const baseUrl = SUPABASE_URL.replace(/\/+$/, '');
+  const rowId = encodeURIComponent(SUPABASE_ROW_ID);
+  const url = `${baseUrl}/rest/v1/${SUPABASE_TABLE}?select=id,data&id=eq.${rowId}&limit=1`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: buildSupabaseHeaders({ Accept: 'application/json' })
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`supabase load failed (${res.status}): ${text}`);
+  }
+  const rows = await res.json().catch(() => []);
+  if (!Array.isArray(rows) || rows.length === 0 || !rows[0] || !rows[0].data) {
+    return null;
+  }
+  const payload = rows[0].data;
+  if (typeof payload === 'string') {
+    try {
+      return JSON.parse(payload);
+    } catch (_error) {
+      return null;
+    }
+  }
+  return payload && typeof payload === 'object' ? payload : null;
+}
+
+async function saveDbToSupabase(snapshot) {
+  const baseUrl = SUPABASE_URL.replace(/\/+$/, '');
+  const url = `${baseUrl}/rest/v1/${SUPABASE_TABLE}?on_conflict=id`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: buildSupabaseHeaders({ Prefer: 'resolution=merge-duplicates,return=minimal' }),
+    body: JSON.stringify([{ id: SUPABASE_ROW_ID, data: snapshot }])
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`supabase save failed (${res.status}): ${text}`);
+  }
+}
+
+let supabaseSaveTimer = null;
+let supabaseSavePending = false;
+let supabaseSaveInFlight = false;
+
+async function flushSupabaseSave() {
+  if (!isSupabaseStorageEnabled() || supabaseSaveInFlight || !supabaseSavePending) {
+    return;
+  }
+  supabaseSaveInFlight = true;
+  while (supabaseSavePending) {
+    supabaseSavePending = false;
+    try {
+      const snapshot = JSON.parse(JSON.stringify(db));
+      await saveDbToSupabase(snapshot);
+    } catch (error) {
+      console.error('[db] failed to save to supabase', error);
+      supabaseSavePending = true;
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  }
+  supabaseSaveInFlight = false;
+}
+
+function queueSupabaseSave() {
+  if (!isSupabaseStorageEnabled()) {
+    return;
+  }
+  supabaseSavePending = true;
+  if (supabaseSaveTimer) {
+    return;
+  }
+  supabaseSaveTimer = setTimeout(() => {
+    supabaseSaveTimer = null;
+    flushSupabaseSave().catch((error) => console.error('[db] flush error', error));
+  }, 400);
+}
+
+function saveDb() {
+  writeLocalDb();
+  queueSupabaseSave();
 }
 
 const db = loadDb();
@@ -2737,6 +2848,25 @@ process.on('uncaughtException', (error) => {
   console.error('[bot] uncaught exception', error);
 });
 
+async function initializeStorage() {
+  if (!isSupabaseStorageEnabled()) {
+    return;
+  }
+  try {
+    const remoteDb = await loadDbFromSupabase();
+    if (remoteDb) {
+      replaceDb(remoteDb);
+      writeLocalDb();
+      console.log('[db] loaded from supabase');
+      return;
+    }
+    await saveDbToSupabase(JSON.parse(JSON.stringify(db)));
+    console.log('[db] created initial supabase state');
+  } catch (error) {
+    console.error('[db] supabase init failed, fallback to local file storage', error);
+  }
+}
+
 if (!DASHBOARD_TOKEN) {
   console.warn('[dashboard] DASHBOARD_TOKEN is empty. API will reject requests until set.');
 }
@@ -2746,7 +2876,14 @@ if (!DISCORD_OAUTH_ENABLED) {
 if (!TECHNICAL_LEAD_ROLE_ID && !TECHNICAL_LEAD_ROLE_NAME) {
   console.warn('[dashboard] TECHNICAL_LEAD_ROLE_ID/TECHNICAL_LEAD_ROLE_NAME is empty. Master access will be blocked.');
 }
+if (STORAGE_BACKEND === 'supabase' && !isSupabaseStorageEnabled()) {
+  console.warn('[db] STORAGE_BACKEND=supabase but SUPABASE_* variables are missing. Falling back to local storage.');
+}
+console.log(`[db] backend: ${isSupabaseStorageEnabled() ? 'supabase' : 'local'}`);
 console.log(`[db] data path: ${DATA_PATH}`);
-startDashboardServer();
 
-client.login(TOKEN);
+(async () => {
+  await initializeStorage();
+  startDashboardServer();
+  await client.login(TOKEN);
+})();
