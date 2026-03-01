@@ -815,15 +815,31 @@ function startDashboardServer() {
       const m = guild.members.cache.get(id);
       return { id, label: m ? `${m.user.username} (${id})` : id };
     });
-    const managerRoles = (guildState.tickets.managerRoleIds || []).map((id) => {
-      const r = guild.roles.cache.get(id);
-      return { id, label: r ? `${r.name} (${id})` : id };
-    });
+    const managerRoles = (guildState.tickets.managerRoleIds || [])
+      .map((id) => {
+        const r = guild.roles.cache.get(id);
+        return {
+          id,
+          label: r ? `${r.name} (${id})` : id,
+          position: r ? Number(r.position || 0) : -1
+        };
+      })
+      .sort((a, b) => (b.position || 0) - (a.position || 0))
+      .map(({ id, label }) => ({ id, label }));
 
     const sourceChannels = fetchedChannels || guild.channels.cache;
     const candidateChannels = Array.from(sourceChannels.values()).filter((ch) =>
       ch && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement)
     );
+
+    const sortByChannelPosition = (a, b) => {
+      const pa = Number(a.rawPosition || 0);
+      const pb = Number(b.rawPosition || 0);
+      if (pa !== pb) {
+        return pa - pb;
+      }
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    };
 
     let textChannels = candidateChannels
       .filter((ch) => {
@@ -835,20 +851,21 @@ function startDashboardServer() {
           perms.has(PermissionsBitField.Flags.ViewChannel) &&
           perms.has(PermissionsBitField.Flags.SendMessages));
       })
+      .sort(sortByChannelPosition)
       .map((ch) => ({ id: ch.id, name: ch.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
 
     // Fallback: expose text channels even when permission calculation is unavailable.
     if (textChannels.length === 0) {
       textChannels = candidateChannels
+        .sort(sortByChannelPosition)
         .map((ch) => ({ id: ch.id, name: ch.name }))
-        .sort((a, b) => a.name.localeCompare(b.name));
     }
 
     const roleOptions = guild.roles.cache
       .filter((r) => r.id !== guild.roles.everyone.id)
-      .map((r) => ({ id: r.id, name: r.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map((r) => ({ id: r.id, name: r.name, position: Number(r.position || 0) }))
+      .sort((a, b) => (b.position || 0) - (a.position || 0))
+      .map(({ id, name }) => ({ id, name }));
 
     let memberOptions = guild.members.cache
       .filter((m) => !m.user.bot)

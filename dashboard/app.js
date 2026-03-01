@@ -70,7 +70,12 @@ function formatTicketDetails(ticket) {
     .join('');
 }
 
-function fillSelect(el, rows, labelKey = 'name', emptyText = '선택 가능한 항목 없음') {
+function guildStorageKey(key) {
+  return `dashboard.${key}.${state.guildId || 'global'}`;
+}
+
+function fillSelect(el, rows, labelKey = 'name', emptyText = '선택 가능한 항목 없음', preferredValue = '') {
+  const previousValue = el.value;
   el.innerHTML = '';
 
   if (!rows || rows.length === 0) {
@@ -88,6 +93,13 @@ function fillSelect(el, rows, labelKey = 'name', emptyText = '선택 가능한 �
     opt.value = row.id;
     opt.textContent = row[labelKey] || row.id;
     el.appendChild(opt);
+  }
+
+  const wantedValue = preferredValue || previousValue;
+  if (wantedValue && rows.some((row) => String(row.id) === String(wantedValue))) {
+    el.value = wantedValue;
+  } else if (rows[0] && rows[0].id) {
+    el.value = rows[0].id;
   }
 }
 
@@ -180,10 +192,14 @@ async function loadData() {
 
   const data = await api(`/api/guilds/${state.guildId}/data`);
   state.data = data;
+  const savedEmbedChannelId = localStorage.getItem(guildStorageKey('embedChannelId')) || '';
 
   fillSelect($('memberSelect'), data.memberOptions || [], 'name', '멤버 목록 없음 (ID 수동 관리 권장)');
   fillSelect($('roleSelect'), data.roleOptions || [], 'name', '역할 목록 없음');
-  fillSelect($('embedChannel'), data.textChannels || [], 'name', '텍스트 채널 없음');
+  fillSelect($('embedChannel'), data.textChannels || [], 'name', '텍스트 채널 없음', savedEmbedChannelId);
+  if ($('embedChannel').value) {
+    localStorage.setItem(guildStorageKey('embedChannelId'), $('embedChannel').value);
+  }
 
   $('managerSummary').textContent = `사용자: ${(data.managerUsers || []).map((x) => x.label).join(', ') || '없음'} | 역할: ${(data.managerRoles || []).map((x) => x.label).join(', ') || '없음'}`;
   renderTables();
@@ -277,6 +293,13 @@ $('guild').addEventListener('change', async () => {
   } catch (error) {
     setStatus(`길드 변경 실패: ${error.message}`, 'error');
   }
+});
+
+$('embedChannel').addEventListener('change', () => {
+  if (!state.guildId) {
+    return;
+  }
+  localStorage.setItem(guildStorageKey('embedChannelId'), $('embedChannel').value || '');
 });
 
 $('liveToggle').addEventListener('change', restartAutoRefresh);
