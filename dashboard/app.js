@@ -261,15 +261,17 @@ $('removeManagerRole').addEventListener('click', () => updateManager('roles', 'r
 $('sendEmbed').addEventListener('click', async () => {
   $('embedResult').textContent = '전송 중...';
   try {
+    const selectedChannelId = $('embedChannel').value;
+    const manualChannelId = String($('embedChannelManual').value || '').trim();
     const payload = {
-      channelId: $('embedChannel').value,
+      channelId: selectedChannelId || manualChannelId,
       title: $('embedTitle').value.trim(),
       description: $('embedDesc').value.trim(),
       color: $('embedColor').value.trim() || '#2b8cff'
     };
 
     if (!payload.channelId || !payload.title || !payload.description) {
-      throw new Error('채널, 제목, 내용을 모두 입력하세요.');
+      throw new Error('채널(선택 또는 ID 직접 입력), 제목, 내용을 모두 입력하세요.');
     }
 
     const result = await api(`/api/guilds/${state.guildId}/embed`, {
