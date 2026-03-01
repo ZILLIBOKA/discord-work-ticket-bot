@@ -136,6 +136,10 @@ function ensureGuild(guildId) {
         history: [],
         nextTicketNo: 1
       },
+      dashboard: {
+        operatorUserIds: [],
+        operatorRoleIds: []
+      },
       customCommands: {},
       users: {},
       automod: {
@@ -148,6 +152,7 @@ function ensureGuild(guildId) {
   const guildState = db.guilds[guildId];
   guildState.ticketChannels = guildState.ticketChannels || {};
   guildState.tickets = guildState.tickets || {};
+  guildState.dashboard = guildState.dashboard || {};
   guildState.tickets.enabled = guildState.tickets.enabled !== false;
   guildState.tickets.categoryId = guildState.tickets.categoryId || '';
   guildState.tickets.supportRoleId = guildState.tickets.supportRoleId || '';
@@ -168,6 +173,12 @@ function ensureGuild(guildId) {
   guildState.tickets.nextTicketNo = Number.isInteger(guildState.tickets.nextTicketNo)
     ? guildState.tickets.nextTicketNo
     : 1;
+  guildState.dashboard.operatorUserIds = Array.isArray(guildState.dashboard.operatorUserIds)
+    ? guildState.dashboard.operatorUserIds.filter(Boolean).map((v) => String(v))
+    : [];
+  guildState.dashboard.operatorRoleIds = Array.isArray(guildState.dashboard.operatorRoleIds)
+    ? guildState.dashboard.operatorRoleIds.filter(Boolean).map((v) => String(v))
+    : [];
   return guildState;
 }
 
@@ -320,6 +331,28 @@ function isTicketManagerMember(member, guildState) {
   }
   const managerRoleIds = Array.isArray(guildState.tickets.managerRoleIds) ? guildState.tickets.managerRoleIds : [];
   if (managerRoleIds.some((roleId) => memberHasRole(member, roleId))) {
+    return true;
+  }
+  return false;
+}
+
+function isOperationsManagerMember(member, guildState) {
+  if (!member) {
+    return false;
+  }
+  if (canModerate(member)) {
+    return true;
+  }
+  const operatorUserIds = Array.isArray(guildState.dashboard && guildState.dashboard.operatorUserIds)
+    ? guildState.dashboard.operatorUserIds
+    : [];
+  if (operatorUserIds.includes(memberUserId(member))) {
+    return true;
+  }
+  const operatorRoleIds = Array.isArray(guildState.dashboard && guildState.dashboard.operatorRoleIds)
+    ? guildState.dashboard.operatorRoleIds
+    : [];
+  if (operatorRoleIds.some((roleId) => memberHasRole(member, roleId))) {
     return true;
   }
   return false;
@@ -788,6 +821,52 @@ function serializeTicket(guild, channelId, ticket) {
   };
 }
 
+function resequenceTickets(guildState, removeTicketNos) {
+  const removeSet = new Set((Array.isArray(removeTicketNos) ? removeTicketNos : [])
+    .map((x) => Number.parseInt(String(x), 10))
+    .filter((x) => Number.isInteger(x) && x > 0));
+
+  if (removeSet.size > 0) {
+    for (const [channelId, meta] of Object.entries(guildState.ticketChannels || {})) {
+      const ticketNo = Number(meta && meta.ticketNo);
+      if (removeSet.has(ticketNo)) {
+        delete guildState.ticketChannels[channelId];
+      }
+    }
+    guildState.tickets.history = (guildState.tickets.history || []).filter((meta) => {
+      const ticketNo = Number(meta && meta.ticketNo);
+      return !removeSet.has(ticketNo);
+    });
+  }
+
+  const records = [];
+  for (const [channelId, meta] of Object.entries(guildState.ticketChannels || {})) {
+    records.push({
+      refType: 'open',
+      channelId,
+      meta,
+      createdAt: Number(meta && meta.createdAt) || 0
+    });
+  }
+  for (let i = 0; i < (guildState.tickets.history || []).length; i += 1) {
+    const meta = guildState.tickets.history[i];
+    records.push({
+      refType: 'history',
+      index: i,
+      meta,
+      createdAt: Number(meta && meta.createdAt) || Number(meta && meta.closedAt) || 0
+    });
+  }
+  records.sort((a, b) => a.createdAt - b.createdAt);
+
+  let ticketNo = 1;
+  for (const record of records) {
+    record.meta.ticketNo = ticketNo;
+    ticketNo += 1;
+  }
+  guildState.tickets.nextTicketNo = ticketNo;
+}
+
 function startDashboardServer() {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
@@ -911,6 +990,39 @@ function startDashboardServer() {
         .map((id) => ({ id, name: `Role ID ${id}` }));
     }
 
+    const operatorUsers = (guildState.dashboard.operatorUserIds || []).map((id) => {
+      const m = guild.members.cache.get(id);
+      return { id, label: m ? `${m.user.username} (${id})` : id };
+    });
+    const operatorRoles = (guildState.dashboard.operatorRoleIds || []).map((id) => {
+      const r = guild.roles.cache.get(id);
+      return { id, label: r ? `${r.name} (${id})` : id };
+    });
+
+    const memberRoleRows = guild.members.cache
+      .filter((m) => !m.user.bot)
+      .map((m) => {
+        const highestRole = m.roles && m.roles.highest ? m.roles.highest : null;
+        return {
+          userId: m.id,
+          username: m.user.username,
+          displayName: m.displayName || m.user.username,
+          highestRoleName: highestRole && highestRole.id !== guild.roles.everyone.id ? highestRole.name : '@everyone',
+          highestRolePosition: highestRole ? Number(highestRole.position || 0) : 0,
+          roles: Array.from((m.roles && m.roles.cache ? m.roles.cache.values() : []))
+            .filter((r) => r.id !== guild.roles.everyone.id)
+            .sort((a, b) => Number(b.position || 0) - Number(a.position || 0))
+            .map((r) => r.name)
+        };
+      })
+      .sort((a, b) => {
+        if (a.highestRolePosition !== b.highestRolePosition) {
+          return b.highestRolePosition - a.highestRolePosition;
+        }
+        return a.displayName.localeCompare(b.displayName);
+      })
+      .slice(0, 1000);
+
     res.json({
       guild: { id: guild.id, name: guild.name },
       settings: {
@@ -920,11 +1032,14 @@ function startDashboardServer() {
       },
       managerUsers,
       managerRoles,
+      operatorUsers,
+      operatorRoles,
       openTickets,
       closedTickets,
       textChannels,
       roleOptions: safeRoleOptions,
       memberOptions,
+      memberRoleRows,
       channelStats: {
         totalFetched: candidateChannels.length,
         availableTextChannels: textChannels.length
@@ -935,6 +1050,9 @@ function startDashboardServer() {
       },
       roleStats: {
         selectableRoles: safeRoleOptions.length
+      },
+      permissions: {
+        operationsAllowedForDashboardUserIdInput: true
       }
     });
   });
@@ -953,7 +1071,9 @@ function startDashboardServer() {
         closedTickets: closedCount,
         managerUsers: Array.isArray(guildState.tickets.managerUserIds) ? guildState.tickets.managerUserIds.length : 0,
         managerRoles: Array.isArray(guildState.tickets.managerRoleIds) ? guildState.tickets.managerRoleIds.length : 0,
-        managerUserIds: Array.isArray(guildState.tickets.managerUserIds) ? guildState.tickets.managerUserIds : []
+        managerUserIds: Array.isArray(guildState.tickets.managerUserIds) ? guildState.tickets.managerUserIds : [],
+        operatorUsers: Array.isArray(guildState.dashboard.operatorUserIds) ? guildState.dashboard.operatorUserIds.length : 0,
+        operatorRoles: Array.isArray(guildState.dashboard.operatorRoleIds) ? guildState.dashboard.operatorRoleIds.length : 0
       });
     }
     guildRows.sort((a, b) => a.guildName.localeCompare(b.guildName));
@@ -1024,50 +1144,96 @@ function startDashboardServer() {
     });
   });
 
-  app.post('/api/guilds/:guildId/manager-users', requireDashboardToken, async (req, res) => {
-    const guild = client.guilds.cache.get(req.params.guildId);
+  app.get('/api/master/guilds/:guildId/actors', requireMasterDashboardToken, async (req, res) => {
+    const guild = client.guilds.cache.get(String(req.params.guildId || ''));
     if (!guild) {
       return res.status(404).json({ error: 'Guild not found' });
     }
     const guildState = ensureGuild(guild.id);
+    await guild.roles.fetch().catch(() => null);
+    await guild.members.fetch({ limit: 1000 }).catch(() => null);
+
+    const roleOptions = guild.roles.cache
+      .filter((r) => r.id !== guild.roles.everyone.id)
+      .map((r) => ({ id: r.id, name: r.name, position: Number(r.position || 0) }))
+      .sort((a, b) => (b.position || 0) - (a.position || 0))
+      .map(({ id, name }) => ({ id, name }));
+
+    const memberOptions = guild.members.cache
+      .filter((m) => !m.user.bot)
+      .map((m) => ({
+        id: m.id,
+        name: `${m.displayName || m.user.username} (${m.id})`,
+        highestRolePosition: Number((m.roles && m.roles.highest && m.roles.highest.position) || 0)
+      }))
+      .sort((a, b) => {
+        if ((a.highestRolePosition || 0) !== (b.highestRolePosition || 0)) {
+          return (b.highestRolePosition || 0) - (a.highestRolePosition || 0);
+        }
+        return a.name.localeCompare(b.name);
+      })
+      .map(({ id, name }) => ({ id, name }))
+      .slice(0, 1000);
+
+    return res.json({
+      guild: { id: guild.id, name: guild.name },
+      memberOptions,
+      roleOptions,
+      currentOperatorUserIds: guildState.dashboard.operatorUserIds || [],
+      currentOperatorRoleIds: guildState.dashboard.operatorRoleIds || []
+    });
+  });
+
+  app.post('/api/master/guilds/:guildId/operators-users', requireMasterDashboardToken, async (req, res) => {
+    const guild = client.guilds.cache.get(String(req.params.guildId || ''));
+    if (!guild) {
+      return res.status(404).json({ error: 'Guild not found' });
+    }
     const action = String(req.body.action || '').toLowerCase();
     const userId = String(req.body.userId || '').trim();
     if (!userId || (action !== 'add' && action !== 'remove')) {
       return res.status(400).json({ error: 'Invalid action or userId' });
     }
-    const set = new Set(guildState.tickets.managerUserIds || []);
+    const guildState = ensureGuild(guild.id);
+    const set = new Set(guildState.dashboard.operatorUserIds || []);
     if (action === 'add') {
       set.add(userId);
     } else {
       set.delete(userId);
     }
-    guildState.tickets.managerUserIds = Array.from(set);
-    await applyAccessToOpenTickets(guild, userId, action === 'add');
+    guildState.dashboard.operatorUserIds = Array.from(set);
     saveDb();
-    return res.json({ ok: true, count: guildState.tickets.managerUserIds.length });
+    return res.json({ ok: true, operatorUserIds: guildState.dashboard.operatorUserIds });
   });
 
-  app.post('/api/guilds/:guildId/manager-roles', requireDashboardToken, async (req, res) => {
-    const guild = client.guilds.cache.get(req.params.guildId);
+  app.post('/api/master/guilds/:guildId/operators-roles', requireMasterDashboardToken, async (req, res) => {
+    const guild = client.guilds.cache.get(String(req.params.guildId || ''));
     if (!guild) {
       return res.status(404).json({ error: 'Guild not found' });
     }
-    const guildState = ensureGuild(guild.id);
     const action = String(req.body.action || '').toLowerCase();
     const roleId = String(req.body.roleId || '').trim();
     if (!roleId || (action !== 'add' && action !== 'remove')) {
       return res.status(400).json({ error: 'Invalid action or roleId' });
     }
-    const set = new Set(guildState.tickets.managerRoleIds || []);
+    const guildState = ensureGuild(guild.id);
+    const set = new Set(guildState.dashboard.operatorRoleIds || []);
     if (action === 'add') {
       set.add(roleId);
     } else {
       set.delete(roleId);
     }
-    guildState.tickets.managerRoleIds = Array.from(set);
-    await applyAccessToOpenTickets(guild, roleId, action === 'add');
+    guildState.dashboard.operatorRoleIds = Array.from(set);
     saveDb();
-    return res.json({ ok: true, count: guildState.tickets.managerRoleIds.length });
+    return res.json({ ok: true, operatorRoleIds: guildState.dashboard.operatorRoleIds });
+  });
+
+  app.post('/api/guilds/:guildId/manager-users', requireDashboardToken, async (req, res) => {
+    return res.status(403).json({ error: 'Permission management is only available in Master tab' });
+  });
+
+  app.post('/api/guilds/:guildId/manager-roles', requireDashboardToken, async (req, res) => {
+    return res.status(403).json({ error: 'Permission management is only available in Master tab' });
   });
 
   app.post('/api/guilds/:guildId/embed', requireDashboardToken, async (req, res) => {
@@ -1085,8 +1251,8 @@ function startDashboardServer() {
       return res.status(400).json({ error: 'requesterUserId, channelId, title, description required' });
     }
     const requesterMember = await guild.members.fetch(requesterUserId).catch(() => null);
-    if (!requesterMember || !isTicketManagerMember(requesterMember, guildState)) {
-      return res.status(403).json({ error: 'Only approved ticket managers can send embeds' });
+    if (!requesterMember || !isOperationsManagerMember(requesterMember, guildState)) {
+      return res.status(403).json({ error: 'Only approved operations managers can send embeds' });
     }
     const channel = guild.channels.cache.get(channelId);
     if (!channel || !channel.isTextBased()) {
@@ -1100,6 +1266,31 @@ function startDashboardServer() {
       .setTimestamp(new Date());
     const sent = await channel.send({ embeds: [embed] });
     res.json({ ok: true, messageId: sent.id });
+  });
+
+  app.post('/api/guilds/:guildId/tickets/resequence', requireDashboardToken, async (req, res) => {
+    const guild = client.guilds.cache.get(req.params.guildId);
+    if (!guild) {
+      return res.status(404).json({ error: 'Guild not found' });
+    }
+    const guildState = ensureGuild(guild.id);
+    const requesterUserId = String(req.body.requesterUserId || '').trim();
+    if (!requesterUserId) {
+      return res.status(400).json({ error: 'requesterUserId required' });
+    }
+    const requesterMember = await guild.members.fetch(requesterUserId).catch(() => null);
+    if (!requesterMember || !isOperationsManagerMember(requesterMember, guildState)) {
+      return res.status(403).json({ error: 'Only approved operations managers can resequence tickets' });
+    }
+    const removeTicketNos = Array.isArray(req.body.removeTicketNos) ? req.body.removeTicketNos : [];
+    resequenceTickets(guildState, removeTicketNos);
+    saveDb();
+    return res.json({
+      ok: true,
+      nextTicketNo: guildState.tickets.nextTicketNo,
+      openCount: Object.keys(guildState.ticketChannels || {}).length,
+      closedCount: (guildState.tickets.history || []).length
+    });
   });
 
   const server = app.listen(DASHBOARD_PORT, () => {

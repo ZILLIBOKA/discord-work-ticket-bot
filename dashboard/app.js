@@ -6,16 +6,13 @@ const state = {
   guildId: '',
   data: null,
   masterData: null,
+  masterActorsByGuild: {},
   refreshTimer: null,
-  activeTab: 'ops'
+  activeTab: 'overview'
 };
 
-if (state.token) {
-  $('token').value = state.token;
-}
-if (state.masterToken) {
-  $('masterToken').value = state.masterToken;
-}
+if (state.token) $('token').value = state.token;
+if (state.masterToken) $('masterToken').value = state.masterToken;
 
 $('endpointHint').textContent = `현재 대시보드 엔드포인트: ${window.location.origin}`;
 
@@ -47,7 +44,6 @@ async function api(path, options = {}) {
       ...authHeaders()
     }
   });
-
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `HTTP ${res.status}`);
@@ -63,7 +59,6 @@ async function apiMaster(path, options = {}) {
       ...masterAuthHeaders()
     }
   });
-
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(txt || `HTTP ${res.status}`);
@@ -88,9 +83,7 @@ function escapeHtml(input) {
 
 function formatTicketDetails(ticket) {
   const answers = Array.isArray(ticket && ticket.intake) ? ticket.intake : [];
-  if (answers.length === 0) {
-    return '-';
-  }
+  if (!answers.length) return '-';
   return answers
     .map((x) => `<div><strong>${escapeHtml(x.label || 'Field')}:</strong> ${escapeHtml(x.value || '-')}</div>`)
     .join('');
@@ -124,7 +117,7 @@ function fillSelect(el, rows, labelKey = 'name', emptyText = '선택 가능한 �
   const wantedValue = preferredValue || previousValue;
   if (wantedValue && rows.some((row) => String(row.id) === String(wantedValue))) {
     el.value = wantedValue;
-  } else if (rows[0] && rows[0].id) {
+  } else {
     el.value = rows[0].id;
   }
 }
@@ -135,33 +128,30 @@ function renderEmptyRow(tbody, colCount, text) {
   tbody.appendChild(tr);
 }
 
-function switchTab(tab) {
-  state.activeTab = tab === 'master' ? 'master' : 'ops';
-  const opsActive = state.activeTab === 'ops';
-  $('opsSection').style.display = opsActive ? '' : 'none';
-  $('masterSection').style.display = opsActive ? 'none' : '';
-  $('opsTabBtn').classList.toggle('active', opsActive);
-  $('masterTabBtn').classList.toggle('active', !opsActive);
-}
-
 function ticketStatusChip(t) {
   if (t.claimedBy) {
     const who = t.claimedByTag || t.claimedBy;
-    return `<span class="chip ok">Claimed · ${who}</span>`;
+    return `<span class="chip ok">Claimed · ${escapeHtml(who)}</span>`;
   }
   return '<span class="chip warn">Open · Unassigned</span>';
+}
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  $('overviewSection').style.display = tab === 'overview' ? '' : 'none';
+  $('opsSection').style.display = tab === 'ops' ? '' : 'none';
+  $('masterSection').style.display = tab === 'master' ? '' : 'none';
+  $('overviewTabBtn').classList.toggle('active', tab === 'overview');
+  $('opsTabBtn').classList.toggle('active', tab === 'ops');
+  $('masterTabBtn').classList.toggle('active', tab === 'master');
 }
 
 function getFilteredClosedTickets(list) {
   const type = $('historyType').value;
   const search = $('historySearch').value.trim().toLowerCase();
   return (list || []).filter((t) => {
-    if (type !== 'all' && t.ticketType !== type) {
-      return false;
-    }
-    if (!search) {
-      return true;
-    }
+    if (type !== 'all' && t.ticketType !== type) return false;
+    if (!search) return true;
     const target = [t.ownerTag, t.ownerId, t.channelName, t.closeReason, t.ticketTypeLabel]
       .concat((Array.isArray(t.intake) ? t.intake : []).map((x) => `${x.label || ''} ${x.value || ''}`))
       .map((x) => String(x || '').toLowerCase())
@@ -170,11 +160,15 @@ function getFilteredClosedTickets(list) {
   });
 }
 
-function renderTables() {
+function renderOverviewTables() {
   const openBody = $('openTable').querySelector('tbody');
   const closedBody = $('closedTable').querySelector('tbody');
+  const userBody = $('userRoleTable').querySelector('tbody');
+  const roleBody = $('rolePriorityTable').querySelector('tbody');
   openBody.innerHTML = '';
   closedBody.innerHTML = '';
+  userBody.innerHTML = '';
+  roleBody.innerHTML = '';
 
   const openTickets = state.data.openTickets || [];
   const closedTickets = state.data.closedTickets || [];
@@ -183,55 +177,147 @@ function renderTables() {
   $('openCount').textContent = String(openTickets.length);
   $('closedCount').textContent = String(closedTickets.length);
 
-  if (openTickets.length === 0) {
+  if (!openTickets.length) {
     renderEmptyRow(openBody, 7, '열린 티켓이 없습니다.');
   } else {
     for (const t of openTickets) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${ticketStatusChip(t)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${escapeHtml(t.channelName)}</td><td>${formatTicketDetails(t)}</td><td>${fmt(t.createdAt)}</td>`;
+      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${escapeHtml(t.ticketTypeLabel)}</td><td>${ticketStatusChip(t)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${escapeHtml(t.channelName)}</td><td>${formatTicketDetails(t)}</td><td>${fmt(t.createdAt)}</td>`;
       openBody.appendChild(tr);
     }
   }
 
-  if (filteredClosed.length === 0) {
+  if (!filteredClosed.length) {
     renderEmptyRow(closedBody, 6, '조건에 맞는 닫힌 티켓이 없습니다.');
   } else {
     for (const t of filteredClosed) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.closedAt)}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.closeReason || '-')}</td>`;
+      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${escapeHtml(t.ticketTypeLabel)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.closedAt)}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.closeReason || '-')}</td>`;
       closedBody.appendChild(tr);
     }
   }
+
+  const memberRows = state.data.memberRoleRows || [];
+  if (!memberRows.length) {
+    renderEmptyRow(userBody, 3, '사용자 정보가 없습니다.');
+  } else {
+    for (const m of memberRows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(m.displayName || m.username)}<br><span class="fine">${escapeHtml(m.userId)}</span></td><td>${escapeHtml(m.highestRoleName || '@everyone')}</td><td>${escapeHtml((m.roles || []).join(', ') || '@everyone')}</td>`;
+      userBody.appendChild(tr);
+    }
+  }
+
+  const roles = state.data.roleOptions || [];
+  if (!roles.length) {
+    renderEmptyRow(roleBody, 2, '역할 정보가 없습니다.');
+  } else {
+    for (const r of roles) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.id)}</td>`;
+      roleBody.appendChild(tr);
+    }
+  }
+}
+
+function renderOperationsHistoryTable() {
+  const tbody = $('opsHistoryTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  const closedTickets = state.data && state.data.closedTickets ? state.data.closedTickets : [];
+  if (!closedTickets.length) {
+    renderEmptyRow(tbody, 6, '닫힌 티켓이 없습니다.');
+    return;
+  }
+  for (const t of closedTickets) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${escapeHtml(t.ticketTypeLabel)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.closedAt)}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.closeReason || '-')}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function loadGuilds() {
+  const data = await api('/api/guilds');
+  const guilds = data.guilds || [];
+  fillSelect($('guild'), guilds, 'name', '접근 가능한 길드가 없습니다');
+  if (!state.guildId && guilds[0]) {
+    state.guildId = guilds[0].id;
+    $('guild').value = state.guildId;
+  }
+  if (!guilds.length) throw new Error('길드 목록이 비어 있습니다.');
+}
+
+async function loadData() {
+  state.guildId = $('guild').value;
+  if (!state.guildId) throw new Error('길드를 먼저 선택하세요.');
+
+  const data = await api(`/api/guilds/${state.guildId}/data`);
+  state.data = data;
+
+  const savedEmbedChannelId = localStorage.getItem(guildStorageKey('embedChannelId')) || '';
+  const savedEmbedRequester = localStorage.getItem(guildStorageKey('embedRequesterUserId')) || '';
+  const savedResequenceRequester = localStorage.getItem(guildStorageKey('resequenceRequesterUserId')) || '';
+
+  fillSelect($('embedChannel'), data.textChannels || [], 'name', '텍스트 채널 없음', savedEmbedChannelId);
+  if ($('embedChannel').value) {
+    localStorage.setItem(guildStorageKey('embedChannelId'), $('embedChannel').value);
+  }
+  if (savedEmbedRequester) $('embedRequesterUserId').value = savedEmbedRequester;
+  if (savedResequenceRequester) $('resequenceRequesterUserId').value = savedResequenceRequester;
+
+  renderOverviewTables();
+  renderOperationsHistoryTable();
+  setLastSync();
+
+  const available = data.channelStats && Number.isInteger(data.channelStats.availableTextChannels)
+    ? data.channelStats.availableTextChannels
+    : (data.textChannels || []).length;
+  const memberCount = (data.memberRoleRows || []).length;
+  const roleCount = (data.roleOptions || []).length;
+  setStatus(`길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 채널 ${available}개 · 사용자 ${memberCount}명 · 역할 ${roleCount}개`);
+}
+
+function restartAutoRefresh() {
+  if (state.refreshTimer) {
+    clearInterval(state.refreshTimer);
+    state.refreshTimer = null;
+  }
+  if (!$('liveToggle').checked) return;
+  const interval = Math.max(3000, Number($('liveInterval').value || 10000));
+  state.refreshTimer = setInterval(async () => {
+    if (!state.token || !state.guildId) return;
+    try {
+      await loadData();
+    } catch (error) {
+      setStatus(`라이브 동기화 실패: ${error.message}`, 'error');
+    }
+  }, interval);
 }
 
 function renderMasterTable() {
   const tbody = $('masterGuildTable').querySelector('tbody');
   tbody.innerHTML = '';
   const guilds = (state.masterData && state.masterData.guilds) || [];
-  if (guilds.length === 0) {
+  if (!guilds.length) {
     renderEmptyRow(tbody, 6, '마스터 데이터가 없습니다.');
     return;
   }
 
   for (const g of guilds) {
-    const tr = document.createElement('tr');
-    const managerText = `${g.managerUsers || 0} users / ${g.managerRoles || 0} roles`;
+    const opText = `${g.operatorUsers || 0} users / ${g.operatorRoles || 0} roles`;
     const toggleLabel = g.ticketEnabled ? 'OFF' : 'ON';
     const toggleClass = g.ticketEnabled ? 'btn-danger' : 'btn-primary';
-    tr.innerHTML = `<td>${escapeHtml(g.guildName)}</td><td>${g.ticketEnabled ? '<span class="chip ok">ON</span>' : '<span class="chip warn">OFF</span>'}</td><td>${g.openTickets || 0}</td><td>${g.closedTickets || 0}</td><td>${escapeHtml(managerText)}</td><td><button class="btn ${toggleClass}" data-master-toggle="${escapeHtml(g.guildId)}">${toggleLabel}</button></td>`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(g.guildName)}</td><td>${g.ticketEnabled ? '<span class="chip ok">ON</span>' : '<span class="chip warn">OFF</span>'}</td><td>${g.openTickets || 0}</td><td>${g.closedTickets || 0}</td><td>${escapeHtml(opText)}</td><td><button class="btn ${toggleClass}" data-master-toggle="${escapeHtml(g.guildId)}">${toggleLabel}</button></td>`;
     tbody.appendChild(tr);
   }
 }
 
 function fillMasterGuildSelect() {
-  const guildRows = (state.masterData && state.masterData.guilds ? state.masterData.guilds : []).map((g) => ({
-    id: g.guildId,
-    name: g.guildName
-  }));
-  const savedMasterGuild = localStorage.getItem('masterManagerGuildId') || '';
-  fillSelect($('masterManagerGuild'), guildRows, 'name', '길드 없음', savedMasterGuild);
-  if ($('masterManagerGuild').value) {
-    localStorage.setItem('masterManagerGuildId', $('masterManagerGuild').value);
+  const guildRows = (state.masterData && state.masterData.guilds || []).map((g) => ({ id: g.guildId, name: g.guildName }));
+  const saved = localStorage.getItem('masterOperatorGuildId') || '';
+  fillSelect($('masterOperatorGuild'), guildRows, 'name', '길드 없음', saved);
+  if ($('masterOperatorGuild').value) {
+    localStorage.setItem('masterOperatorGuildId', $('masterOperatorGuild').value);
   }
 }
 
@@ -245,144 +331,46 @@ async function loadMasterData() {
   $('masterSummary').textContent = `Bot: ${botTag} | Guilds: ${guildCount} | Open: ${totalOpen} | Closed: ${totalClosed}`;
   fillMasterGuildSelect();
   renderMasterTable();
+  await loadMasterActors();
 }
 
-async function masterToggleAll(enabled) {
-  await apiMaster('/api/master/tickets-enabled', {
-    method: 'POST',
-    body: JSON.stringify({ enabled: !!enabled })
-  });
-  await loadMasterData();
-}
-
-async function masterToggleGuild(guildId, enabled) {
-  await apiMaster(`/api/master/guilds/${guildId}/tickets-enabled`, {
-    method: 'POST',
-    body: JSON.stringify({ enabled: !!enabled })
-  });
-  await loadMasterData();
-}
-
-async function masterUpdateManagerUser(action) {
-  const guildId = String($('masterManagerGuild').value || '').trim();
-  const userId = String($('masterManagerUserId').value || '').trim();
-  if (!guildId || !userId) {
-    throw new Error('길드와 사용자 ID를 입력하세요.');
-  }
-
-  await apiMaster(`/api/master/guilds/${guildId}/manager-users`, {
-    method: 'POST',
-    body: JSON.stringify({ action, userId })
-  });
-  $('masterManagerUserId').value = '';
-  await loadMasterData();
-}
-
-async function loadGuilds() {
-  const data = await api('/api/guilds');
-  const guilds = data.guilds || [];
-
-  fillSelect($('guild'), guilds, 'name', '접근 가능한 길드가 없습니다');
-  if (!state.guildId && guilds[0]) {
-    state.guildId = guilds[0].id;
-    $('guild').value = state.guildId;
-  }
-
-  if (guilds.length === 0) {
-    throw new Error('길드 목록이 비어 있습니다. 봇 초대/권한을 확인하세요.');
-  }
-}
-
-async function loadData() {
-  state.guildId = $('guild').value;
-  if (!state.guildId) {
-    throw new Error('길드를 먼저 선택하세요.');
-  }
-
-  const data = await api(`/api/guilds/${state.guildId}/data`);
-  state.data = data;
-  const savedEmbedChannelId = localStorage.getItem(guildStorageKey('embedChannelId')) || '';
-  const savedRequesterUserId = localStorage.getItem(guildStorageKey('embedRequesterUserId')) || '';
-
-  fillSelect($('memberSelect'), data.memberOptions || [], 'name', '멤버 목록 없음 (ID 수동 관리 권장)');
-  fillSelect($('roleSelect'), data.roleOptions || [], 'name', '역할 목록 없음');
-  fillSelect($('embedChannel'), data.textChannels || [], 'name', '텍스트 채널 없음', savedEmbedChannelId);
-  if ($('embedChannel').value) {
-    localStorage.setItem(guildStorageKey('embedChannelId'), $('embedChannel').value);
-  }
-  if (savedRequesterUserId) {
-    $('embedRequesterUserId').value = savedRequesterUserId;
-  }
-
-  $('managerSummary').textContent = `사용자: ${(data.managerUsers || []).map((x) => x.label).join(', ') || '없음'} | 역할: ${(data.managerRoles || []).map((x) => x.label).join(', ') || '없음'}`;
-  renderTables();
-  setLastSync();
-  const available = data.channelStats && Number.isInteger(data.channelStats.availableTextChannels)
-    ? data.channelStats.availableTextChannels
-    : (data.textChannels || []).length;
-  const memberCount = (data.memberOptions || []).length;
-  const roleCount = (data.roleOptions || []).length;
-  let status = `길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 채널 ${available}개 · 멤버 ${memberCount}명 · 역할 ${roleCount}개`;
-  if (memberCount === 0) {
-    status += ' (멤버 인텐트/권한 제한 가능)';
-  }
-  if (available === 0) {
-    status += ' (채널 권한 확인 필요)';
-  }
-  setStatus(status);
-}
-
-function restartAutoRefresh() {
-  if (state.refreshTimer) {
-    clearInterval(state.refreshTimer);
-    state.refreshTimer = null;
-  }
-
-  if (!$('liveToggle').checked) {
+async function loadMasterActors() {
+  const guildId = String($('masterOperatorGuild').value || '').trim();
+  if (!guildId) {
+    fillSelect($('masterOperatorMemberSelect'), [], 'name', '멤버 없음');
+    fillSelect($('masterOperatorRoleSelect'), [], 'name', '역할 없음');
+    $('masterOperatorSummary').textContent = '운영 권한 정보 없음';
     return;
   }
 
-  const interval = Math.max(3000, Number($('liveInterval').value || 10000));
-  state.refreshTimer = setInterval(async () => {
-    if (!state.token || !state.guildId) {
-      return;
-    }
-    try {
-      await loadData();
-    } catch (error) {
-      setStatus(`라이브 동기화 실패: ${error.message}`, 'error');
-    }
-  }, interval);
+  let actors = state.masterActorsByGuild[guildId];
+  if (!actors) {
+    actors = await apiMaster(`/api/master/guilds/${guildId}/actors`);
+    state.masterActorsByGuild[guildId] = actors;
+  }
+
+  fillSelect($('masterOperatorMemberSelect'), actors.memberOptions || [], 'name', '멤버 없음');
+  fillSelect($('masterOperatorRoleSelect'), actors.roleOptions || [], 'name', '역할 없음');
+  $('masterOperatorSummary').textContent = `현재 Operations 사용자: ${(actors.currentOperatorUserIds || []).join(', ') || '없음'} | 역할: ${(actors.currentOperatorRoleIds || []).join(', ') || '없음'}`;
 }
 
-async function updateManager(kind, action) {
-  const selectedId = kind === 'users' ? $('memberSelect').value : $('roleSelect').value;
-  const manualUserId = kind === 'users' ? String($('memberManualId').value || '').trim() : '';
-  const id = kind === 'users' ? (manualUserId || selectedId) : selectedId;
-  if (!id) {
-    setStatus('선택 가능한 항목이 없어 작업을 건너뜁니다.', 'error');
-    return;
-  }
+async function refreshMasterActors(guildId) {
+  state.masterActorsByGuild[guildId] = null;
+  await loadMasterActors();
+  await loadMasterData();
+}
 
-  const body = kind === 'users' ? { action, userId: id } : { action, roleId: id };
-  await api(`/api/guilds/${state.guildId}/manager-${kind}`, {
-    method: 'POST',
-    body: JSON.stringify(body)
-  });
-
-  await loadData();
-  if (kind === 'users' && manualUserId) {
-    $('memberManualId').value = '';
-  }
+function parseTicketNoList(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((x) => Number.parseInt(x.trim(), 10))
+    .filter((x) => Number.isInteger(x) && x > 0);
 }
 
 $('saveToken').addEventListener('click', async () => {
   try {
     state.token = $('token').value.trim();
-    if (!state.token) {
-      setStatus('토큰을 입력하세요.', 'error');
-      return;
-    }
+    if (!state.token) throw new Error('토큰을 입력하세요.');
     localStorage.setItem('dashboardToken', state.token);
     await loadGuilds();
     await loadData();
@@ -395,9 +383,7 @@ $('saveToken').addEventListener('click', async () => {
 $('saveMasterToken').addEventListener('click', async () => {
   try {
     state.masterToken = $('masterToken').value.trim();
-    if (!state.masterToken) {
-      throw new Error('마스터 토큰을 입력하세요.');
-    }
+    if (!state.masterToken) throw new Error('마스터 토큰을 입력하세요.');
     localStorage.setItem('masterDashboardToken', state.masterToken);
     await loadMasterData();
     setStatus('마스터 토큰 저장 및 검증 완료');
@@ -430,114 +416,49 @@ $('guild').addEventListener('change', async () => {
   }
 });
 
-$('masterManagerGuild').addEventListener('change', () => {
-  localStorage.setItem('masterManagerGuildId', $('masterManagerGuild').value || '');
-});
-
 $('embedChannel').addEventListener('change', () => {
-  if (!state.guildId) {
-    return;
-  }
+  if (!state.guildId) return;
   localStorage.setItem(guildStorageKey('embedChannelId'), $('embedChannel').value || '');
 });
 $('embedRequesterUserId').addEventListener('change', () => {
-  if (!state.guildId) {
-    return;
-  }
+  if (!state.guildId) return;
   localStorage.setItem(guildStorageKey('embedRequesterUserId'), String($('embedRequesterUserId').value || '').trim());
+});
+$('resequenceRequesterUserId').addEventListener('change', () => {
+  if (!state.guildId) return;
+  localStorage.setItem(guildStorageKey('resequenceRequesterUserId'), String($('resequenceRequesterUserId').value || '').trim());
 });
 
 $('liveToggle').addEventListener('change', restartAutoRefresh);
 $('liveInterval').addEventListener('change', restartAutoRefresh);
+
+$('overviewTabBtn').addEventListener('click', () => switchTab('overview'));
 $('opsTabBtn').addEventListener('click', () => switchTab('ops'));
 $('masterTabBtn').addEventListener('click', () => switchTab('master'));
 
-$('historyType').addEventListener('change', renderTables);
-$('historySearch').addEventListener('input', renderTables);
+$('historyType').addEventListener('change', renderOverviewTables);
+$('historySearch').addEventListener('input', renderOverviewTables);
 $('historyClear').addEventListener('click', () => {
   $('historyType').value = 'all';
   $('historySearch').value = '';
-  renderTables();
-});
-
-$('addManagerUser').addEventListener('click', () => updateManager('users', 'add').catch((e) => setStatus(`사용자 추가 실패: ${e.message}`, 'error')));
-$('removeManagerUser').addEventListener('click', () => updateManager('users', 'remove').catch((e) => setStatus(`사용자 제거 실패: ${e.message}`, 'error')));
-$('addManagerRole').addEventListener('click', () => updateManager('roles', 'add').catch((e) => setStatus(`역할 추가 실패: ${e.message}`, 'error')));
-$('removeManagerRole').addEventListener('click', () => updateManager('roles', 'remove').catch((e) => setStatus(`역할 제거 실패: ${e.message}`, 'error')));
-
-$('masterEnableAll').addEventListener('click', async () => {
-  try {
-    await masterToggleAll(true);
-  } catch (error) {
-    setStatus(`전체 ON 실패: ${error.message}`, 'error');
-  }
-});
-
-$('masterDisableAll').addEventListener('click', async () => {
-  try {
-    await masterToggleAll(false);
-  } catch (error) {
-    setStatus(`전체 OFF 실패: ${error.message}`, 'error');
-  }
-});
-
-$('masterAddManagerUser').addEventListener('click', async () => {
-  try {
-    await masterUpdateManagerUser('add');
-  } catch (error) {
-    setStatus(`마스터 사용자 추가 실패: ${error.message}`, 'error');
-  }
-});
-
-$('masterRemoveManagerUser').addEventListener('click', async () => {
-  try {
-    await masterUpdateManagerUser('remove');
-  } catch (error) {
-    setStatus(`마스터 사용자 제거 실패: ${error.message}`, 'error');
-  }
-});
-
-$('masterGuildTable').addEventListener('click', async (ev) => {
-  const target = ev.target;
-  if (!target || !target.dataset || !target.dataset.masterToggle) {
-    return;
-  }
-  const guildId = target.dataset.masterToggle;
-  const guild = (state.masterData && state.masterData.guilds || []).find((g) => g.guildId === guildId);
-  if (!guild) {
-    return;
-  }
-  try {
-    await masterToggleGuild(guildId, !guild.ticketEnabled);
-  } catch (error) {
-    setStatus(`길드 티켓 상태 변경 실패: ${error.message}`, 'error');
-  }
+  renderOverviewTables();
 });
 
 $('sendEmbed').addEventListener('click', async () => {
   $('embedResult').textContent = '전송 중...';
   try {
-    const selectedChannelId = $('embedChannel').value;
-    const manualChannelId = String($('embedChannelManual').value || '').trim();
-    const requesterUserId = String($('embedRequesterUserId').value || '').trim();
     const payload = {
-      requesterUserId,
-      channelId: selectedChannelId || manualChannelId,
+      requesterUserId: String($('embedRequesterUserId').value || '').trim(),
+      channelId: $('embedChannel').value || String($('embedChannelManual').value || '').trim(),
       title: $('embedTitle').value.trim(),
       description: $('embedDesc').value.trim(),
       color: $('embedColor').value.trim() || '#2b8cff'
     };
-
     if (!payload.requesterUserId || !payload.channelId || !payload.title || !payload.description) {
-      throw new Error('발신자 ID, 채널(선택 또는 ID 직접 입력), 제목, 내용을 모두 입력하세요.');
+      throw new Error('발신자 ID, 채널, 제목, 내용을 모두 입력하세요.');
     }
     localStorage.setItem(guildStorageKey('embedRequesterUserId'), payload.requesterUserId);
-
-    const result = await api(`/api/guilds/${state.guildId}/embed`, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-
+    const result = await api(`/api/guilds/${state.guildId}/embed`, { method: 'POST', body: JSON.stringify(payload) });
     $('embedResult').textContent = `전송 완료 (messageId: ${result.messageId})`;
     $('embedResult').style.color = '#128058';
   } catch (error) {
@@ -546,8 +467,141 @@ $('sendEmbed').addEventListener('click', async () => {
   }
 });
 
+$('runResequence').addEventListener('click', async () => {
+  $('resequenceResult').textContent = '처리 중...';
+  try {
+    const requesterUserId = String($('resequenceRequesterUserId').value || '').trim();
+    const removeTicketNos = parseTicketNoList($('removeTicketNos').value);
+    if (!requesterUserId) {
+      throw new Error('발신자 Discord User ID를 입력하세요.');
+    }
+    localStorage.setItem(guildStorageKey('resequenceRequesterUserId'), requesterUserId);
+    const result = await api(`/api/guilds/${state.guildId}/tickets/resequence`, {
+      method: 'POST',
+      body: JSON.stringify({ requesterUserId, removeTicketNos })
+    });
+    $('resequenceResult').textContent = `완료: nextTicketNo=${result.nextTicketNo}, open=${result.openCount}, closed=${result.closedCount}`;
+    $('resequenceResult').style.color = '#128058';
+    $('removeTicketNos').value = '';
+    await loadData();
+  } catch (error) {
+    $('resequenceResult').textContent = `실패: ${error.message}`;
+    $('resequenceResult').style.color = '#d13a49';
+  }
+});
+
+$('masterEnableAll').addEventListener('click', async () => {
+  try {
+    await apiMaster('/api/master/tickets-enabled', { method: 'POST', body: JSON.stringify({ enabled: true }) });
+    await loadMasterData();
+  } catch (error) {
+    setStatus(`전체 ON 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterDisableAll').addEventListener('click', async () => {
+  try {
+    await apiMaster('/api/master/tickets-enabled', { method: 'POST', body: JSON.stringify({ enabled: false }) });
+    await loadMasterData();
+  } catch (error) {
+    setStatus(`전체 OFF 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterOperatorGuild').addEventListener('change', async () => {
+  localStorage.setItem('masterOperatorGuildId', $('masterOperatorGuild').value || '');
+  try {
+    await loadMasterActors();
+  } catch (error) {
+    setStatus(`운영 권한 대상 로드 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterAddOperatorUser').addEventListener('click', async () => {
+  try {
+    const guildId = String($('masterOperatorGuild').value || '').trim();
+    const manualId = String($('masterOperatorUserIdManual').value || '').trim();
+    const selectedId = String($('masterOperatorMemberSelect').value || '').trim();
+    const userId = manualId || selectedId;
+    if (!guildId || !userId) throw new Error('길드와 사용자 ID를 선택/입력하세요.');
+    await apiMaster(`/api/master/guilds/${guildId}/operators-users`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'add', userId })
+    });
+    $('masterOperatorUserIdManual').value = '';
+    await refreshMasterActors(guildId);
+  } catch (error) {
+    setStatus(`Operations 사용자 추가 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterRemoveOperatorUser').addEventListener('click', async () => {
+  try {
+    const guildId = String($('masterOperatorGuild').value || '').trim();
+    const manualId = String($('masterOperatorUserIdManual').value || '').trim();
+    const selectedId = String($('masterOperatorMemberSelect').value || '').trim();
+    const userId = manualId || selectedId;
+    if (!guildId || !userId) throw new Error('길드와 사용자 ID를 선택/입력하세요.');
+    await apiMaster(`/api/master/guilds/${guildId}/operators-users`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'remove', userId })
+    });
+    $('masterOperatorUserIdManual').value = '';
+    await refreshMasterActors(guildId);
+  } catch (error) {
+    setStatus(`Operations 사용자 제거 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterAddOperatorRole').addEventListener('click', async () => {
+  try {
+    const guildId = String($('masterOperatorGuild').value || '').trim();
+    const roleId = String($('masterOperatorRoleSelect').value || '').trim();
+    if (!guildId || !roleId) throw new Error('길드와 역할을 선택하세요.');
+    await apiMaster(`/api/master/guilds/${guildId}/operators-roles`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'add', roleId })
+    });
+    await refreshMasterActors(guildId);
+  } catch (error) {
+    setStatus(`Operations 역할 추가 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterRemoveOperatorRole').addEventListener('click', async () => {
+  try {
+    const guildId = String($('masterOperatorGuild').value || '').trim();
+    const roleId = String($('masterOperatorRoleSelect').value || '').trim();
+    if (!guildId || !roleId) throw new Error('길드와 역할을 선택하세요.');
+    await apiMaster(`/api/master/guilds/${guildId}/operators-roles`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'remove', roleId })
+    });
+    await refreshMasterActors(guildId);
+  } catch (error) {
+    setStatus(`Operations 역할 제거 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterGuildTable').addEventListener('click', async (ev) => {
+  const target = ev.target;
+  if (!target || !target.dataset || !target.dataset.masterToggle) return;
+  const guildId = target.dataset.masterToggle;
+  const guild = (state.masterData && state.masterData.guilds || []).find((g) => g.guildId === guildId);
+  if (!guild) return;
+  try {
+    await apiMaster(`/api/master/guilds/${guildId}/tickets-enabled`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled: !guild.ticketEnabled })
+    });
+    await loadMasterData();
+  } catch (error) {
+    setStatus(`길드 티켓 상태 변경 실패: ${error.message}`, 'error');
+  }
+});
+
 (async () => {
-  switchTab('ops');
+  switchTab('overview');
 
   if (!state.token) {
     setStatus('토큰을 입력해 연결하세요.');
@@ -565,7 +619,7 @@ $('sendEmbed').addEventListener('click', async () => {
     try {
       await loadMasterData();
     } catch (_error) {
-      // silent: user can reload manually
+      // handled by manual load
     }
   }
 })();
