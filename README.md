@@ -121,6 +121,7 @@ create table if not exists public.bot_state (
 
 ### 6.3 Master
 - 임베드 공지 전송
+- 삭제 티켓 복구 (Operations에서 제거한 티켓 복원)
 - 길드별 Operations 사용자/역할 추가/제거
 - Master 접근 조건
   1. Discord 로그인

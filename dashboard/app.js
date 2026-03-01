@@ -323,6 +323,21 @@ function renderMasterIssuerStats(stats) {
   }
 }
 
+function renderMasterDeletedTickets(items) {
+  const rows = Array.isArray(items) ? items : [];
+  const options = rows.map((row) => {
+    const no = Number.parseInt(String(row.deletedTicketNo || ''), 10);
+    const owner = row.ownerTag || row.ownerId || '-';
+    const type = row.ticketTypeLabel || row.ticketType || 'Ticket';
+    const deletedAt = row.deletedAt ? fmt(row.deletedAt) : '-';
+    return {
+      id: String(no),
+      name: `#${no} | ${type} | ${owner} | deleted: ${deletedAt}`
+    };
+  });
+  fillMultiSelect($('masterDeletedTicketMulti'), options, 'name', '복구 가능한 삭제 티켓 없음');
+}
+
 function renderEmptyRow(tbody, colCount, text) {
   const tr = document.createElement('tr');
   tr.innerHTML = `<td colspan="${colCount}" class="muted-cell">${text}</td>`;
@@ -574,6 +589,7 @@ async function loadMasterActors() {
     fillMultiSelect($('masterOperatorRoleMulti'), [], 'name', '역할 없음');
     fillMultiSelect($('masterCurrentOperatorUsers'), [], 'name', '없음');
     fillMultiSelect($('masterCurrentOperatorRoles'), [], 'name', '없음');
+    fillMultiSelect($('masterDeletedTicketMulti'), [], 'name', '복구 가능한 삭제 티켓 없음');
     renderMasterIssuerStats([]);
     $('masterOperatorSummary').textContent = '운영 권한 정보 없음';
     return;
@@ -603,6 +619,7 @@ async function loadMasterActors() {
   fillMultiSelect($('masterCurrentOperatorUsers'), currentUsers, 'name', '없음');
   fillMultiSelect($('masterCurrentOperatorRoles'), currentRoles, 'name', '없음');
   renderMasterIssuerStats(actors.issuerStats || []);
+  renderMasterDeletedTickets(actors.deletedTickets || []);
 
   $('masterOperatorSummary').textContent = `현재 Operations 사용자 ${currentUsers.length}명 | 역할 ${currentRoles.length}개`;
 }
@@ -949,6 +966,29 @@ $('masterRemoveOperatorRoles').addEventListener('click', async () => {
     await refreshMasterActors(guildId);
   } catch (error) {
     setStatus(`Operations 역할 제거 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterRestoreDeletedTickets').addEventListener('click', async () => {
+  try {
+    const guildId = String($('masterOperatorGuild').value || '').trim();
+    const ticketNos = selectedValues($('masterDeletedTicketMulti'))
+      .map((x) => Number.parseInt(String(x), 10))
+      .filter((x) => Number.isInteger(x) && x > 0);
+    if (!guildId || ticketNos.length === 0) {
+      throw new Error('길드와 복구할 티켓을 선택하세요.');
+    }
+    const result = await apiMaster(`/api/master/guilds/${guildId}/restore-tickets`, {
+      method: 'POST',
+      body: JSON.stringify({ ticketNos })
+    });
+    $('masterRestoreResult').textContent = `복구 완료: ${result.restoredCount}건`;
+    $('masterRestoreResult').style.color = '#128058';
+    await refreshMasterActors(guildId);
+    await loadData().catch(() => {});
+  } catch (error) {
+    $('masterRestoreResult').textContent = `복구 실패: ${error.message}`;
+    $('masterRestoreResult').style.color = '#d13a49';
   }
 });
 

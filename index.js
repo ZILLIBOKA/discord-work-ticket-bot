@@ -304,6 +304,7 @@ function ensureGuild(guildId) {
   guildState.tickets.sheetRange = guildState.tickets.sheetRange || DEFAULT_SHEET_RANGE;
   guildState.tickets.panelMessageId = guildState.tickets.panelMessageId || '';
   guildState.tickets.history = Array.isArray(guildState.tickets.history) ? guildState.tickets.history : [];
+  guildState.tickets.deletedTickets = Array.isArray(guildState.tickets.deletedTickets) ? guildState.tickets.deletedTickets : [];
   guildState.tickets.nextTicketNo = Number.isInteger(guildState.tickets.nextTicketNo)
     ? guildState.tickets.nextTicketNo
     : 1;
@@ -1113,16 +1114,32 @@ function resequenceTickets(guildState, removeTicketNos) {
     .filter((x) => Number.isInteger(x) && x > 0));
 
   if (removeSet.size > 0) {
+    const deletedBucket = Array.isArray(guildState.tickets.deletedTickets) ? guildState.tickets.deletedTickets : [];
     for (const [channelId, meta] of Object.entries(guildState.ticketChannels || {})) {
       const ticketNo = Number(meta && meta.ticketNo);
       if (removeSet.has(ticketNo)) {
+        deletedBucket.push({
+          deletedTicketNo: ticketNo,
+          sourceType: 'open',
+          deletedAt: Date.now(),
+          data: { ...meta, channelId }
+        });
         delete guildState.ticketChannels[channelId];
       }
     }
     guildState.tickets.history = (guildState.tickets.history || []).filter((meta) => {
       const ticketNo = Number(meta && meta.ticketNo);
+      if (removeSet.has(ticketNo)) {
+        deletedBucket.push({
+          deletedTicketNo: ticketNo,
+          sourceType: 'history',
+          deletedAt: Date.now(),
+          data: { ...meta }
+        });
+      }
       return !removeSet.has(ticketNo);
     });
+    guildState.tickets.deletedTickets = deletedBucket.slice(-1000);
   }
 
   const records = [];
@@ -1220,6 +1237,22 @@ function ensureTicketNumbers(guildState) {
 
   guildState.tickets.nextTicketNo = nextNo;
   return changed;
+}
+
+function formatDeletedTicket(item) {
+  const meta = item && item.data ? item.data : {};
+  const summary = buildTicketSummary(meta);
+  return {
+    deletedTicketNo: Number(item && item.deletedTicketNo) || null,
+    sourceType: String(item && item.sourceType ? item.sourceType : 'history'),
+    deletedAt: Number(item && item.deletedAt) || 0,
+    ticketType: summary.ticketType,
+    ticketTypeLabel: summary.ticketTypeLabel,
+    ownerId: String(meta.ownerId || ''),
+    ownerTag: String(meta.ownerTag || meta.ownerId || ''),
+    closeReason: String(meta.closeReason || ''),
+    intake: Array.isArray(meta.intake) ? meta.intake : []
+  };
 }
 
 function startDashboardServer() {
@@ -1725,6 +1758,10 @@ function startDashboardServer() {
         }
         return String(a.ownerName || '').localeCompare(String(b.ownerName || ''));
       });
+    const deletedTickets = (guildState.tickets.deletedTickets || [])
+      .map((item) => formatDeletedTicket(item))
+      .sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0))
+      .slice(0, 500);
 
     return res.json({
       guild: { id: guild.id, name: guild.name },
@@ -1732,7 +1769,59 @@ function startDashboardServer() {
       roleOptions,
       currentOperatorUserIds: guildState.dashboard.operatorUserIds || [],
       currentOperatorRoleIds: guildState.dashboard.operatorRoleIds || [],
-      issuerStats
+      issuerStats,
+      deletedTickets
+    });
+  });
+
+  app.post('/api/master/guilds/:guildId/restore-tickets', requireMasterDashboardToken, async (req, res) => {
+    const guild = client.guilds.cache.get(String(req.params.guildId || ''));
+    if (!guild) {
+      return res.status(404).json({ error: 'Guild not found' });
+    }
+    const ticketNos = Array.isArray(req.body.ticketNos) ? req.body.ticketNos : [];
+    const selected = new Set(
+      ticketNos
+        .map((n) => Number.parseInt(String(n), 10))
+        .filter((n) => Number.isInteger(n) && n > 0)
+    );
+    if (!selected.size) {
+      return res.status(400).json({ error: 'ticketNos is required' });
+    }
+
+    const guildState = ensureGuild(guild.id);
+    const deleted = Array.isArray(guildState.tickets.deletedTickets) ? guildState.tickets.deletedTickets : [];
+    const restoreItems = [];
+    const remainItems = [];
+    for (const item of deleted) {
+      const no = Number(item && item.deletedTicketNo);
+      if (selected.has(no)) {
+        restoreItems.push(item);
+      } else {
+        remainItems.push(item);
+      }
+    }
+
+    for (const item of restoreItems) {
+      if (!item || !item.data) {
+        continue;
+      }
+      const restored = {
+        ...item.data,
+        ticketNo: Number(item.deletedTicketNo) || Number(item.data.ticketNo) || null,
+        status: 'closed',
+        closeReason: item.data.closeReason || 'Restored from deleted tickets'
+      };
+      guildState.tickets.history.push(restored);
+    }
+
+    guildState.tickets.deletedTickets = remainItems;
+    ensureTicketNumbers(guildState);
+    saveDb();
+    return res.json({
+      ok: true,
+      restoredCount: restoreItems.length,
+      remainingDeletedCount: guildState.tickets.deletedTickets.length
     });
   });
 
