@@ -5,6 +5,7 @@ const state = {
   masterToken: localStorage.getItem('masterDashboardToken') || '',
   oauthEnabled: false,
   authUser: null,
+  technicalLead: false,
   guildId: '',
   data: null,
   masterData: null,
@@ -98,9 +99,12 @@ function applyAuthUserToInputs() {
 }
 
 function renderAuthStatus() {
+  $('masterTabBtn').disabled = !state.technicalLead;
+  $('masterTabBtn').style.opacity = state.technicalLead ? '1' : '0.5';
   if (state.authUser && state.authUser.id) {
     const label = state.authUser.globalName || state.authUser.username || state.authUser.id;
-    $('authUserText').textContent = `로그인됨: ${label} (${state.authUser.id})`;
+    const leadText = state.technicalLead ? 'Technical Lead' : 'General User';
+    $('authUserText').textContent = `로그인됨: ${label} (${state.authUser.id}) · ${leadText}`;
     $('discordLoginBtn').style.display = 'none';
     $('discordLogoutBtn').style.display = '';
   } else {
@@ -121,9 +125,11 @@ async function loadAuthUser() {
     }
     const data = await res.json();
     state.authUser = data && data.user ? data.user : null;
+    state.technicalLead = !!(data && data.technicalLead);
     renderAuthStatus();
   } catch (_error) {
     state.authUser = null;
+    state.technicalLead = false;
     renderAuthStatus();
   }
 }
@@ -506,7 +512,13 @@ $('liveInterval').addEventListener('change', restartAutoRefresh);
 
 $('overviewTabBtn').addEventListener('click', () => switchTab('overview'));
 $('opsTabBtn').addEventListener('click', () => switchTab('ops'));
-$('masterTabBtn').addEventListener('click', () => switchTab('master'));
+$('masterTabBtn').addEventListener('click', () => {
+  if (!state.technicalLead) {
+    setStatus('Master 탭은 Technical Lead만 접근할 수 있습니다.', 'error');
+    return;
+  }
+  switchTab('master');
+});
 $('discordLoginBtn').addEventListener('click', () => {
   const loginPath = $('discordLoginBtn').dataset.loginPath || '/auth/discord/start';
   const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;

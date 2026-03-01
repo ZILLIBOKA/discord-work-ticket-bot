@@ -45,6 +45,10 @@ const DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || '').trim();
 const DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
 const DISCORD_REDIRECT_URI = String(process.env.DISCORD_REDIRECT_URI || '').trim();
 const DISCORD_OAUTH_ENABLED = !!(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET && DISCORD_REDIRECT_URI);
+const TECHNICAL_LEAD_USER_IDS = String(process.env.TECHNICAL_LEAD_USER_IDS || process.env.TECHNICAL_LEAD_USER_ID || '')
+  .split(',')
+  .map((x) => x.trim())
+  .filter(Boolean);
 const SLASH_GUILD_ID = String(process.env.SLASH_GUILD_ID || '').trim();
 const ENABLE_GUILD_MEMBERS_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_GUILD_MEMBERS_INTENT || 'false'));
 const ENABLE_MESSAGE_CONTENT_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_MESSAGE_CONTENT_INTENT || 'false'));
@@ -782,15 +786,32 @@ function clearDashboardSessionCookie(res) {
   res.setHeader('Set-Cookie', 'dashboard_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
 }
 
+function isTechnicalLeadUserId(userId) {
+  if (!userId) {
+    return false;
+  }
+  return TECHNICAL_LEAD_USER_IDS.includes(String(userId));
+}
+
 function requireMasterDashboardToken(req, res, next) {
   if (!MASTER_DASHBOARD_TOKEN) {
     return res.status(503).json({ error: 'Master dashboard token is not configured' });
+  }
+  if (!DISCORD_OAUTH_ENABLED) {
+    return res.status(503).json({ error: 'Discord OAuth is required for Master access' });
+  }
+  if (TECHNICAL_LEAD_USER_IDS.length === 0) {
+    return res.status(503).json({ error: 'TECHNICAL_LEAD_USER_IDS is not configured' });
   }
   const fromHeader = String(req.headers['x-master-token'] || '').trim();
   const fromQuery = String(req.query.masterToken || '').trim();
   const token = fromHeader || fromQuery;
   if (token !== MASTER_DASHBOARD_TOKEN) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const authUser = getDashboardAuthUser(req);
+  if (!authUser || !isTechnicalLeadUserId(authUser.id)) {
+    return res.status(403).json({ error: 'Master access is allowed only for Technical Lead' });
   }
   next();
 }
@@ -954,7 +975,11 @@ function startDashboardServer() {
 
   app.get('/api/auth/me', (req, res) => {
     const user = getDashboardAuthUser(req);
-    res.json({ ok: true, user });
+    res.json({
+      ok: true,
+      user,
+      technicalLead: !!(user && isTechnicalLeadUserId(user.id))
+    });
   });
 
   app.post('/api/auth/logout', (req, res) => {
@@ -2658,6 +2683,9 @@ if (!MASTER_DASHBOARD_TOKEN) {
 }
 if (!DISCORD_OAUTH_ENABLED) {
   console.warn('[dashboard] Discord OAuth is disabled. Set DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_URI.');
+}
+if (TECHNICAL_LEAD_USER_IDS.length === 0) {
+  console.warn('[dashboard] TECHNICAL_LEAD_USER_IDS is empty. Master access will be blocked.');
 }
 startDashboardServer();
 
