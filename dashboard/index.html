@@ -303,6 +303,12 @@
       background: #fff6ea;
       border-color: #ffd5a0;
     }
+    .chk {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
     .chip.ok {
       color: #0d6d4c;
       background: #e9fbf3;
@@ -463,12 +469,13 @@
       #rolePriorityTable tbody td:nth-child(1)::before { content: 'Role'; }
       #rolePriorityTable tbody td:nth-child(2)::before { content: 'Role ID'; }
 
-      #opsHistoryTable tbody td:nth-child(1)::before { content: 'No'; }
-      #opsHistoryTable tbody td:nth-child(2)::before { content: 'Type'; }
-      #opsHistoryTable tbody td:nth-child(3)::before { content: 'Owner'; }
-      #opsHistoryTable tbody td:nth-child(4)::before { content: 'Closed'; }
-      #opsHistoryTable tbody td:nth-child(5)::before { content: 'Details'; }
-      #opsHistoryTable tbody td:nth-child(6)::before { content: 'Reason'; }
+      #opsHistoryTable tbody td:nth-child(1)::before { content: 'Select'; }
+      #opsHistoryTable tbody td:nth-child(2)::before { content: 'No'; }
+      #opsHistoryTable tbody td:nth-child(3)::before { content: 'Type'; }
+      #opsHistoryTable tbody td:nth-child(4)::before { content: 'Owner'; }
+      #opsHistoryTable tbody td:nth-child(5)::before { content: 'Closed'; }
+      #opsHistoryTable tbody td:nth-child(6)::before { content: 'Details'; }
+      #opsHistoryTable tbody td:nth-child(7)::before { content: 'Reason'; }
 
       #masterIssuerStatsTable tbody td:nth-child(1)::before { content: 'User'; }
       #masterIssuerStatsTable tbody td:nth-child(2)::before { content: 'Role'; }
@@ -638,7 +645,10 @@
           <h2 class="title" style="font-size:18px; margin-bottom:10px;">Ticket Number Maintenance</h2>
           <p class="fine">잘못 생성된 티켓 번호를 제거하고 전체 번호를 생성일 기준으로 다시 순차 정렬합니다.</p>
           <input id="resequenceRequesterUserId" class="field" placeholder="Your Discord User ID (Operations Manager)" />
-          <input id="removeTicketNos" class="field" style="margin-top:8px;" placeholder="Remove Ticket No list (e.g. 3, 7, 15)" />
+          <input id="removeTicketNos" class="field" style="margin-top:8px;" placeholder="선택된 Ticket No가 여기에 표시됩니다" readonly />
+          <div class="row" style="margin-top:8px;">
+            <button id="clearSelectedTickets" class="btn btn-soft">선택 해제</button>
+          </div>
           <div class="row" style="margin-top:10px;">
             <button id="runResequence" class="btn btn-danger">잘못 생성 티켓 제거 + 번호 재정렬</button>
           </div>
@@ -653,6 +663,7 @@
             <table id="opsHistoryTable">
               <thead>
                 <tr>
+                  <th><input id="opsSelectAll" class="chk" type="checkbox" /></th>
                   <th>No</th>
                   <th>Type</th>
                   <th>Owner</th>
@@ -673,7 +684,7 @@
       <p class="fine" style="margin-bottom:10px;">Operations 권한(사용자/역할)만 관리합니다.</p>
 
       <section class="panel" style="margin-bottom:12px;">
-        <h2 class="title" style="font-size:18px; margin-bottom:10px;">임베드 공지 전송 (Master 전용)</h2>
+        <h2 class="title" style="font-size:18px; margin-bottom:10px;">임베드 공지 전송</h2>
         <p class="label">채널</p>
         <select id="embedChannel" class="select"></select>
         <input id="embedChannelManual" class="field" style="margin-top:8px;" placeholder="If channel list is empty, paste Channel ID here (optional)" />

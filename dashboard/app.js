@@ -11,6 +11,7 @@ const state = {
   data: null,
   masterData: null,
   masterActorsByGuild: {},
+  selectedOpsTicketNos: new Set(),
   refreshTimer: null,
   activeTab: 'overview'
 };
@@ -420,15 +421,34 @@ function renderOperationsHistoryTable() {
   const tbody = $('opsHistoryTable').querySelector('tbody');
   tbody.innerHTML = '';
   const closedTickets = state.data && state.data.closedTickets ? state.data.closedTickets : [];
+  const validNos = new Set(
+    closedTickets
+      .map((t) => Number.parseInt(t.ticketNo, 10))
+      .filter((n) => Number.isInteger(n) && n > 0)
+  );
+  state.selectedOpsTicketNos = new Set(
+    Array.from(state.selectedOpsTicketNos).filter((n) => validNos.has(Number(n)))
+  );
+
   if (!closedTickets.length) {
-    renderEmptyRow(tbody, 6, '닫힌 티켓이 없습니다.');
+    renderEmptyRow(tbody, 7, '닫힌 티켓이 없습니다.');
+    $('opsSelectAll').checked = false;
+    $('removeTicketNos').value = '';
     return;
   }
+
   for (const t of closedTickets) {
+    const ticketNo = Number.parseInt(t.ticketNo, 10);
+    const checked = Number.isInteger(ticketNo) && state.selectedOpsTicketNos.has(ticketNo) ? 'checked' : '';
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${escapeHtml(t.ticketTypeLabel)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.closedAt)}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.closeReason || '-')}</td>`;
+    tr.innerHTML = `<td><input class="chk ops-ticket-select" type="checkbox" data-ticket-no="${ticketNo || ''}" ${checked} /></td><td>${t.ticketNo || '-'}</td><td>${escapeHtml(t.ticketTypeLabel)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.closedAt)}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.closeReason || '-')}</td>`;
     tbody.appendChild(tr);
   }
+
+  const totalRows = closedTickets.filter((t) => Number.isInteger(Number.parseInt(t.ticketNo, 10))).length;
+  const selectedCount = Array.from(state.selectedOpsTicketNos).filter((n) => validNos.has(Number(n))).length;
+  $('opsSelectAll').checked = totalRows > 0 && selectedCount === totalRows;
+  $('removeTicketNos').value = Array.from(state.selectedOpsTicketNos).sort((a, b) => a - b).join(', ');
 }
 
 async function loadGuilds() {
@@ -740,7 +760,8 @@ $('runResequence').addEventListener('click', async () => {
     const requesterUserId = state.authUser && state.authUser.id
       ? state.authUser.id
       : String($('resequenceRequesterUserId').value || '').trim();
-    const removeTicketNos = parseTicketNoList($('removeTicketNos').value);
+    const selectedNos = Array.from(state.selectedOpsTicketNos).map((n) => Number.parseInt(n, 10)).filter((n) => Number.isInteger(n) && n > 0);
+    const removeTicketNos = selectedNos.length ? selectedNos : parseTicketNoList($('removeTicketNos').value);
     if (!requesterUserId) {
       throw new Error('발신자 Discord User ID를 입력하세요.');
     }
@@ -751,12 +772,71 @@ $('runResequence').addEventListener('click', async () => {
     });
     $('resequenceResult').textContent = `완료: nextTicketNo=${result.nextTicketNo}, open=${result.openCount}, closed=${result.closedCount}`;
     $('resequenceResult').style.color = '#128058';
+    state.selectedOpsTicketNos.clear();
     $('removeTicketNos').value = '';
+    $('opsSelectAll').checked = false;
     await loadData();
   } catch (error) {
     $('resequenceResult').textContent = `실패: ${error.message}`;
     $('resequenceResult').style.color = '#d13a49';
   }
+});
+
+$('opsSelectAll').addEventListener('change', () => {
+  const checked = !!$('opsSelectAll').checked;
+  const checkboxes = Array.from(document.querySelectorAll('.ops-ticket-select'));
+  if (!checkboxes.length) {
+    state.selectedOpsTicketNos.clear();
+    $('removeTicketNos').value = '';
+    return;
+  }
+  for (const el of checkboxes) {
+    const no = Number.parseInt(el.dataset.ticketNo || '', 10);
+    if (!Number.isInteger(no) || no <= 0) {
+      continue;
+    }
+    el.checked = checked;
+    if (checked) {
+      state.selectedOpsTicketNos.add(no);
+    } else {
+      state.selectedOpsTicketNos.delete(no);
+    }
+  }
+  $('removeTicketNos').value = Array.from(state.selectedOpsTicketNos).sort((a, b) => a - b).join(', ');
+});
+
+$('opsHistoryTable').addEventListener('change', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  if (!target.classList.contains('ops-ticket-select')) {
+    return;
+  }
+  const no = Number.parseInt(target.dataset.ticketNo || '', 10);
+  if (!Number.isInteger(no) || no <= 0) {
+    return;
+  }
+  if (target.checked) {
+    state.selectedOpsTicketNos.add(no);
+  } else {
+    state.selectedOpsTicketNos.delete(no);
+  }
+  const checkboxes = Array.from(document.querySelectorAll('.ops-ticket-select'));
+  const totalRows = checkboxes.length;
+  const selectedCount = checkboxes.filter((el) => el.checked).length;
+  $('opsSelectAll').checked = totalRows > 0 && selectedCount === totalRows;
+  $('removeTicketNos').value = Array.from(state.selectedOpsTicketNos).sort((a, b) => a - b).join(', ');
+});
+
+$('clearSelectedTickets').addEventListener('click', () => {
+  state.selectedOpsTicketNos.clear();
+  $('opsSelectAll').checked = false;
+  const checkboxes = Array.from(document.querySelectorAll('.ops-ticket-select'));
+  for (const el of checkboxes) {
+    el.checked = false;
+  }
+  $('removeTicketNos').value = '';
 });
 
 $('masterOperatorGuild').addEventListener('change', async () => {
