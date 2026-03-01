@@ -1438,7 +1438,7 @@ function startDashboardServer() {
       .filter((m) => !m.user.bot)
       .map((m) => ({
         id: m.id,
-        name: `${m.displayName || m.user.username} (${m.id})`,
+        name: `${m.displayName || m.user.username} | ${m.roles && m.roles.highest ? m.roles.highest.name : '@everyone'} | ${m.id}`,
         highestRolePosition: Number((m.roles && m.roles.highest && m.roles.highest.position) || 0)
       }))
       .sort((a, b) => {

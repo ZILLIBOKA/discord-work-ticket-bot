@@ -246,6 +246,28 @@
       letter-spacing: 0.35px;
     }
 
+    .master-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .master-col {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      background: #f9fbff;
+    }
+    .master-col .label {
+      margin-bottom: 8px;
+    }
+    .select[multiple] {
+      min-height: 220px;
+      padding: 6px;
+      line-height: 1.45;
+      white-space: nowrap;
+    }
+
     .fine {
       font-size: 12px;
       color: var(--muted);
@@ -349,6 +371,7 @@
       .row > * { flex-basis: 100%; }
       .metrics { grid-template-columns: 1fr; }
       .filters { grid-template-columns: 1fr; }
+      .master-grid { grid-template-columns: 1fr; }
       .tabs {
         width: 100%;
         display: grid;
@@ -660,9 +683,15 @@
       <div class="row">
         <select id="masterOperatorGuild" class="select"></select>
       </div>
-      <div class="row" style="margin-top:8px;">
-        <select id="masterOperatorMemberMulti" class="select" multiple size="10"></select>
-        <select id="masterOperatorRoleMulti" class="select" multiple size="10"></select>
+      <div class="master-grid">
+        <div class="master-col">
+          <p class="label">사용자 선택 (이름 | 역할 | ID)</p>
+          <select id="masterOperatorMemberMulti" class="select" multiple size="10"></select>
+        </div>
+        <div class="master-col">
+          <p class="label">역할 선택</p>
+          <select id="masterOperatorRoleMulti" class="select" multiple size="10"></select>
+        </div>
       </div>
       <div class="row" style="margin-top:8px;">
         <button id="masterAddOperatorUsers" class="btn btn-primary">선택 사용자 권한 추가</button>
@@ -673,9 +702,15 @@
         <button id="masterRemoveOperatorRoles" class="btn btn-danger">선택 역할 권한 제거</button>
       </div>
       <p class="label" style="margin-top:10px;">Current Operations Permission</p>
-      <div class="row">
-        <select id="masterCurrentOperatorUsers" class="select" multiple size="8"></select>
-        <select id="masterCurrentOperatorRoles" class="select" multiple size="8"></select>
+      <div class="master-grid">
+        <div class="master-col">
+          <p class="label">현재 사용자 권한</p>
+          <select id="masterCurrentOperatorUsers" class="select" multiple size="8"></select>
+        </div>
+        <div class="master-col">
+          <p class="label">현재 역할 권한</p>
+          <select id="masterCurrentOperatorRoles" class="select" multiple size="8"></select>
+        </div>
       </div>
       <p id="masterOperatorSummary" class="fine" style="margin-top:8px;">운영 권한 정보 없음</p>
       <p id="masterLeadMatchInfo" class="fine" style="margin-top:6px;">Technical Lead 매칭 길드 정보 없음</p>

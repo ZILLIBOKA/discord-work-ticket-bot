@@ -488,7 +488,7 @@ function restartAutoRefresh() {
   if (!$('liveToggle').checked) return;
   const interval = Math.max(3000, Number($('liveInterval').value || 10000));
   state.refreshTimer = setInterval(async () => {
-    if (!state.token || !state.guildId) return;
+    if (!hasDashboardAccess() || !state.guildId) return;
     try {
       await loadData();
     } catch (error) {
