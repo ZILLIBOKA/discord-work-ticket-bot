@@ -1075,12 +1075,18 @@ function startDashboardServer() {
     if (!guild) {
       return res.status(404).json({ error: 'Guild not found' });
     }
+    const guildState = ensureGuild(guild.id);
+    const requesterUserId = String(req.body.requesterUserId || '').trim();
     const channelId = String(req.body.channelId || '').trim();
     const title = String(req.body.title || '').trim();
     const description = String(req.body.description || '').trim();
     const colorRaw = String(req.body.color || '#2b8cff').trim();
-    if (!channelId || !title || !description) {
-      return res.status(400).json({ error: 'channelId, title, description required' });
+    if (!requesterUserId || !channelId || !title || !description) {
+      return res.status(400).json({ error: 'requesterUserId, channelId, title, description required' });
+    }
+    const requesterMember = await guild.members.fetch(requesterUserId).catch(() => null);
+    if (!requesterMember || !isTicketManagerMember(requesterMember, guildState)) {
+      return res.status(403).json({ error: 'Only approved ticket managers can send embeds' });
     }
     const channel = guild.channels.cache.get(channelId);
     if (!channel || !channel.isTextBased()) {

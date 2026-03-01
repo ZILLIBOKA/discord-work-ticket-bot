@@ -302,12 +302,16 @@ async function loadData() {
   const data = await api(`/api/guilds/${state.guildId}/data`);
   state.data = data;
   const savedEmbedChannelId = localStorage.getItem(guildStorageKey('embedChannelId')) || '';
+  const savedRequesterUserId = localStorage.getItem(guildStorageKey('embedRequesterUserId')) || '';
 
   fillSelect($('memberSelect'), data.memberOptions || [], 'name', '멤버 목록 없음 (ID 수동 관리 권장)');
   fillSelect($('roleSelect'), data.roleOptions || [], 'name', '역할 목록 없음');
   fillSelect($('embedChannel'), data.textChannels || [], 'name', '텍스트 채널 없음', savedEmbedChannelId);
   if ($('embedChannel').value) {
     localStorage.setItem(guildStorageKey('embedChannelId'), $('embedChannel').value);
+  }
+  if (savedRequesterUserId) {
+    $('embedRequesterUserId').value = savedRequesterUserId;
   }
 
   $('managerSummary').textContent = `사용자: ${(data.managerUsers || []).map((x) => x.label).join(', ') || '없음'} | 역할: ${(data.managerRoles || []).map((x) => x.label).join(', ') || '없음'}`;
@@ -436,6 +440,12 @@ $('embedChannel').addEventListener('change', () => {
   }
   localStorage.setItem(guildStorageKey('embedChannelId'), $('embedChannel').value || '');
 });
+$('embedRequesterUserId').addEventListener('change', () => {
+  if (!state.guildId) {
+    return;
+  }
+  localStorage.setItem(guildStorageKey('embedRequesterUserId'), String($('embedRequesterUserId').value || '').trim());
+});
 
 $('liveToggle').addEventListener('change', restartAutoRefresh);
 $('liveInterval').addEventListener('change', restartAutoRefresh);
@@ -509,16 +519,19 @@ $('sendEmbed').addEventListener('click', async () => {
   try {
     const selectedChannelId = $('embedChannel').value;
     const manualChannelId = String($('embedChannelManual').value || '').trim();
+    const requesterUserId = String($('embedRequesterUserId').value || '').trim();
     const payload = {
+      requesterUserId,
       channelId: selectedChannelId || manualChannelId,
       title: $('embedTitle').value.trim(),
       description: $('embedDesc').value.trim(),
       color: $('embedColor').value.trim() || '#2b8cff'
     };
 
-    if (!payload.channelId || !payload.title || !payload.description) {
-      throw new Error('채널(선택 또는 ID 직접 입력), 제목, 내용을 모두 입력하세요.');
+    if (!payload.requesterUserId || !payload.channelId || !payload.title || !payload.description) {
+      throw new Error('발신자 ID, 채널(선택 또는 ID 직접 입력), 제목, 내용을 모두 입력하세요.');
     }
+    localStorage.setItem(guildStorageKey('embedRequesterUserId'), payload.requesterUserId);
 
     const result = await api(`/api/guilds/${state.guildId}/embed`, {
       method: 'POST',
