@@ -3,6 +3,8 @@ const $ = (id) => document.getElementById(id);
 const state = {
   token: localStorage.getItem('dashboardToken') || '',
   masterToken: localStorage.getItem('masterDashboardToken') || '',
+  oauthEnabled: false,
+  authUser: null,
   guildId: '',
   data: null,
   masterData: null,
@@ -64,6 +66,66 @@ async function apiMaster(path, options = {}) {
     throw new Error(txt || `HTTP ${res.status}`);
   }
   return res.json();
+}
+
+async function loadAuthConfig() {
+  try {
+    const res = await fetch('/api/auth/discord/config');
+    if (!res.ok) {
+      return;
+    }
+    const data = await res.json();
+    state.oauthEnabled = !!data.enabled;
+    $('discordLoginBtn').style.display = state.oauthEnabled ? '' : 'none';
+    $('discordLogoutBtn').style.display = state.oauthEnabled ? '' : 'none';
+    $('discordLoginBtn').dataset.loginPath = data.loginPath || '/auth/discord/start';
+  } catch (_error) {
+    // keep default
+  }
+}
+
+function applyAuthUserToInputs() {
+  const userId = state.authUser && state.authUser.id ? state.authUser.id : '';
+  if (userId) {
+    $('embedRequesterUserId').value = userId;
+    $('resequenceRequesterUserId').value = userId;
+    $('embedRequesterUserId').readOnly = true;
+    $('resequenceRequesterUserId').readOnly = true;
+  } else {
+    $('embedRequesterUserId').readOnly = false;
+    $('resequenceRequesterUserId').readOnly = false;
+  }
+}
+
+function renderAuthStatus() {
+  if (state.authUser && state.authUser.id) {
+    const label = state.authUser.globalName || state.authUser.username || state.authUser.id;
+    $('authUserText').textContent = `로그인됨: ${label} (${state.authUser.id})`;
+    $('discordLoginBtn').style.display = 'none';
+    $('discordLogoutBtn').style.display = '';
+  } else {
+    $('authUserText').textContent = state.oauthEnabled ? 'Discord 로그인 필요' : 'Discord OAuth 미설정';
+    $('discordLoginBtn').style.display = state.oauthEnabled ? '' : 'none';
+    $('discordLogoutBtn').style.display = state.oauthEnabled ? '' : 'none';
+  }
+  applyAuthUserToInputs();
+}
+
+async function loadAuthUser() {
+  try {
+    const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+    if (!res.ok) {
+      state.authUser = null;
+      renderAuthStatus();
+      return;
+    }
+    const data = await res.json();
+    state.authUser = data && data.user ? data.user : null;
+    renderAuthStatus();
+  } catch (_error) {
+    state.authUser = null;
+    renderAuthStatus();
+  }
 }
 
 function fmt(ts) {
@@ -261,8 +323,14 @@ async function loadData() {
   if ($('embedChannel').value) {
     localStorage.setItem(guildStorageKey('embedChannelId'), $('embedChannel').value);
   }
-  if (savedEmbedRequester) $('embedRequesterUserId').value = savedEmbedRequester;
-  if (savedResequenceRequester) $('resequenceRequesterUserId').value = savedResequenceRequester;
+  if (!state.authUser || !state.authUser.id) {
+    if (savedEmbedRequester) $('embedRequesterUserId').value = savedEmbedRequester;
+    if (savedResequenceRequester) $('resequenceRequesterUserId').value = savedResequenceRequester;
+  }
+  const allowRequesterInput = !!(data.permissions && data.permissions.operationsAllowedForDashboardUserIdInput);
+  $('embedRequesterUserId').style.display = allowRequesterInput ? '' : 'none';
+  $('resequenceRequesterUserId').style.display = allowRequesterInput ? '' : 'none';
+  applyAuthUserToInputs();
 
   renderOverviewTables();
   renderOperationsHistoryTable();
@@ -273,7 +341,11 @@ async function loadData() {
     : (data.textChannels || []).length;
   const memberCount = (data.memberRoleRows || []).length;
   const roleCount = (data.roleOptions || []).length;
-  setStatus(`길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 채널 ${available}개 · 사용자 ${memberCount}명 · 역할 ${roleCount}개`);
+  let status = `길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 채널 ${available}개 · 사용자 ${memberCount}명 · 역할 ${roleCount}개`;
+  if (data.auth && data.auth.permissions && data.auth.permissions.loggedIn) {
+    status += data.auth.permissions.operationsManager ? ' · Operations 권한 있음' : ' · Operations 권한 없음';
+  }
+  setStatus(status);
 }
 
 function restartAutoRefresh() {
@@ -435,6 +507,21 @@ $('liveInterval').addEventListener('change', restartAutoRefresh);
 $('overviewTabBtn').addEventListener('click', () => switchTab('overview'));
 $('opsTabBtn').addEventListener('click', () => switchTab('ops'));
 $('masterTabBtn').addEventListener('click', () => switchTab('master'));
+$('discordLoginBtn').addEventListener('click', () => {
+  const loginPath = $('discordLoginBtn').dataset.loginPath || '/auth/discord/start';
+  const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  window.location.href = `${loginPath}?returnTo=${encodeURIComponent(returnTo)}`;
+});
+$('discordLogoutBtn').addEventListener('click', async () => {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    state.authUser = null;
+    renderAuthStatus();
+    setStatus('Discord 로그아웃 완료');
+  } catch (error) {
+    setStatus(`로그아웃 실패: ${error.message}`, 'error');
+  }
+});
 
 $('historyType').addEventListener('change', renderOverviewTables);
 $('historySearch').addEventListener('input', renderOverviewTables);
@@ -447,8 +534,11 @@ $('historyClear').addEventListener('click', () => {
 $('sendEmbed').addEventListener('click', async () => {
   $('embedResult').textContent = '전송 중...';
   try {
+    const requesterUserId = state.authUser && state.authUser.id
+      ? state.authUser.id
+      : String($('embedRequesterUserId').value || '').trim();
     const payload = {
-      requesterUserId: String($('embedRequesterUserId').value || '').trim(),
+      requesterUserId,
       channelId: $('embedChannel').value || String($('embedChannelManual').value || '').trim(),
       title: $('embedTitle').value.trim(),
       description: $('embedDesc').value.trim(),
@@ -470,7 +560,9 @@ $('sendEmbed').addEventListener('click', async () => {
 $('runResequence').addEventListener('click', async () => {
   $('resequenceResult').textContent = '처리 중...';
   try {
-    const requesterUserId = String($('resequenceRequesterUserId').value || '').trim();
+    const requesterUserId = state.authUser && state.authUser.id
+      ? state.authUser.id
+      : String($('resequenceRequesterUserId').value || '').trim();
     const removeTicketNos = parseTicketNoList($('removeTicketNos').value);
     if (!requesterUserId) {
       throw new Error('발신자 Discord User ID를 입력하세요.');
@@ -602,6 +694,8 @@ $('masterGuildTable').addEventListener('click', async (ev) => {
 
 (async () => {
   switchTab('overview');
+  await loadAuthConfig();
+  await loadAuthUser();
 
   if (!state.token) {
     setStatus('토큰을 입력해 연결하세요.');

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const dotenv = require('dotenv');
 let googleapis = null;
@@ -40,6 +41,10 @@ const GOOGLE_SERVICE_ACCOUNT_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_FILE || '
 const DASHBOARD_PORT = Number(process.env.DASHBOARD_PORT || 8787);
 const DASHBOARD_TOKEN = String(process.env.DASHBOARD_TOKEN || '').trim();
 const MASTER_DASHBOARD_TOKEN = String(process.env.MASTER_DASHBOARD_TOKEN || '').trim();
+const DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || '').trim();
+const DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
+const DISCORD_REDIRECT_URI = String(process.env.DISCORD_REDIRECT_URI || '').trim();
+const DISCORD_OAUTH_ENABLED = !!(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET && DISCORD_REDIRECT_URI);
 const SLASH_GUILD_ID = String(process.env.SLASH_GUILD_ID || '').trim();
 const ENABLE_GUILD_MEMBERS_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_GUILD_MEMBERS_INTENT || 'false'));
 const ENABLE_MESSAGE_CONTENT_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_MESSAGE_CONTENT_INTENT || 'false'));
@@ -110,6 +115,8 @@ function saveDb() {
 
 const db = loadDb();
 const xpCooldown = new Map();
+const dashboardOauthStates = new Map();
+const dashboardSessions = new Map();
 
 function ensureGuild(guildId) {
   if (!db.guilds[guildId]) {
@@ -709,6 +716,72 @@ function requireDashboardToken(req, res, next) {
   next();
 }
 
+function parseCookies(req) {
+  const header = String(req.headers.cookie || '');
+  if (!header) {
+    return {};
+  }
+  const out = {};
+  for (const chunk of header.split(';')) {
+    const idx = chunk.indexOf('=');
+    if (idx <= 0) {
+      continue;
+    }
+    const key = chunk.slice(0, idx).trim();
+    const value = chunk.slice(idx + 1).trim();
+    out[key] = decodeURIComponent(value);
+  }
+  return out;
+}
+
+function cleanupDashboardSessions() {
+  const now = Date.now();
+  for (const [key, value] of dashboardOauthStates.entries()) {
+    if (!value || value.expiresAt <= now) {
+      dashboardOauthStates.delete(key);
+    }
+  }
+  for (const [sid, session] of dashboardSessions.entries()) {
+    if (!session || session.expiresAt <= now) {
+      dashboardSessions.delete(sid);
+    }
+  }
+}
+
+function getDashboardAuthUser(req) {
+  cleanupDashboardSessions();
+  const cookies = parseCookies(req);
+  const sid = String(cookies.dashboard_session || '').trim();
+  if (!sid) {
+    return null;
+  }
+  const session = dashboardSessions.get(sid);
+  if (!session) {
+    return null;
+  }
+  if (session.expiresAt <= Date.now()) {
+    dashboardSessions.delete(sid);
+    return null;
+  }
+  return session.user || null;
+}
+
+function setDashboardSessionCookie(res, sid) {
+  const maxAge = 1000 * 60 * 60 * 24 * 7;
+  const parts = [
+    `dashboard_session=${encodeURIComponent(sid)}`,
+    'Path=/',
+    `Max-Age=${Math.floor(maxAge / 1000)}`,
+    'HttpOnly',
+    'SameSite=Lax'
+  ];
+  res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearDashboardSessionCookie(res) {
+  res.setHeader('Set-Cookie', 'dashboard_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+}
+
 function requireMasterDashboardToken(req, res, next) {
   if (!MASTER_DASHBOARD_TOKEN) {
     return res.status(503).json({ error: 'Master dashboard token is not configured' });
@@ -872,6 +945,108 @@ function startDashboardServer() {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.static(DASHBOARD_DIR));
 
+  app.get('/api/auth/discord/config', (_req, res) => {
+    res.json({
+      enabled: DISCORD_OAUTH_ENABLED,
+      loginPath: '/auth/discord/start'
+    });
+  });
+
+  app.get('/api/auth/me', (req, res) => {
+    const user = getDashboardAuthUser(req);
+    res.json({ ok: true, user });
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    const cookies = parseCookies(req);
+    const sid = String(cookies.dashboard_session || '').trim();
+    if (sid) {
+      dashboardSessions.delete(sid);
+    }
+    clearDashboardSessionCookie(res);
+    res.json({ ok: true });
+  });
+
+  app.get('/auth/discord/start', (req, res) => {
+    if (!DISCORD_OAUTH_ENABLED) {
+      return res.status(503).send('Discord OAuth is not configured');
+    }
+    const state = crypto.randomBytes(16).toString('hex');
+    const returnTo = String(req.query.returnTo || '/').trim();
+    dashboardOauthStates.set(state, {
+      returnTo: returnTo.startsWith('/') ? returnTo : '/',
+      expiresAt: Date.now() + (1000 * 60 * 10)
+    });
+    const authUrl = new URL('https://discord.com/oauth2/authorize');
+    authUrl.searchParams.set('client_id', DISCORD_CLIENT_ID);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('redirect_uri', DISCORD_REDIRECT_URI);
+    authUrl.searchParams.set('scope', 'identify');
+    authUrl.searchParams.set('state', state);
+    return res.redirect(authUrl.toString());
+  });
+
+  app.get('/auth/discord/callback', async (req, res) => {
+    if (!DISCORD_OAUTH_ENABLED) {
+      return res.status(503).send('Discord OAuth is not configured');
+    }
+    const code = String(req.query.code || '').trim();
+    const state = String(req.query.state || '').trim();
+    const stateRow = dashboardOauthStates.get(state);
+    dashboardOauthStates.delete(state);
+    if (!code || !stateRow || stateRow.expiresAt <= Date.now()) {
+      return res.status(400).send('Invalid OAuth state or code');
+    }
+    try {
+      const tokenBody = new URLSearchParams();
+      tokenBody.set('client_id', DISCORD_CLIENT_ID);
+      tokenBody.set('client_secret', DISCORD_CLIENT_SECRET);
+      tokenBody.set('grant_type', 'authorization_code');
+      tokenBody.set('code', code);
+      tokenBody.set('redirect_uri', DISCORD_REDIRECT_URI);
+      tokenBody.set('scope', 'identify');
+
+      const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: tokenBody.toString()
+      });
+      if (!tokenRes.ok) {
+        const txt = await tokenRes.text();
+        throw new Error(`token exchange failed: ${txt}`);
+      }
+      const tokenJson = await tokenRes.json();
+      const accessToken = String(tokenJson.access_token || '');
+      if (!accessToken) {
+        throw new Error('missing access_token');
+      }
+      const meRes = await fetch('https://discord.com/api/users/@me', {
+        headers: { authorization: `Bearer ${accessToken}` }
+      });
+      if (!meRes.ok) {
+        const txt = await meRes.text();
+        throw new Error(`profile fetch failed: ${txt}`);
+      }
+      const me = await meRes.json();
+      const sid = crypto.randomBytes(24).toString('hex');
+      dashboardSessions.set(sid, {
+        user: {
+          id: String(me.id || ''),
+          username: String(me.username || ''),
+          globalName: String(me.global_name || ''),
+          discriminator: String(me.discriminator || ''),
+          avatar: String(me.avatar || '')
+        },
+        expiresAt: Date.now() + (1000 * 60 * 60 * 24 * 7)
+      });
+      setDashboardSessionCookie(res, sid);
+      return res.redirect(stateRow.returnTo || '/');
+    } catch (error) {
+      console.error('[dashboard] oauth callback failed', error);
+      return res.status(500).send('OAuth callback failed');
+    }
+  });
+
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, bot: client.user ? client.user.tag : 'starting' });
   });
@@ -888,6 +1063,7 @@ function startDashboardServer() {
       return res.status(404).json({ error: 'Guild not found' });
     }
     const guildState = ensureGuild(guild.id);
+    const authUser = getDashboardAuthUser(req);
 
     const fetchedChannels = await guild.channels.fetch().catch(() => null);
     await guild.roles.fetch().catch(() => null);
@@ -978,6 +1154,16 @@ function startDashboardServer() {
         .map((id) => ({ id, name: `User ID ${id}` }));
     }
 
+    let authUserPermissions = {
+      loggedIn: !!authUser,
+      userId: authUser ? authUser.id : '',
+      operationsManager: false
+    };
+    if (authUser && authUser.id) {
+      const authMember = guild.members.cache.get(String(authUser.id)) || await guild.members.fetch(String(authUser.id)).catch(() => null);
+      authUserPermissions.operationsManager = !!(authMember && isOperationsManagerMember(authMember, guildState));
+    }
+
     let safeRoleOptions = roleOptions;
     if (safeRoleOptions.length === 0) {
       safeRoleOptions = [
@@ -1052,7 +1238,11 @@ function startDashboardServer() {
         selectableRoles: safeRoleOptions.length
       },
       permissions: {
-        operationsAllowedForDashboardUserIdInput: true
+        operationsAllowedForDashboardUserIdInput: !DISCORD_OAUTH_ENABLED
+      },
+      auth: {
+        user: authUser,
+        permissions: authUserPermissions
       }
     });
   });
@@ -1242,13 +1432,19 @@ function startDashboardServer() {
       return res.status(404).json({ error: 'Guild not found' });
     }
     const guildState = ensureGuild(guild.id);
-    const requesterUserId = String(req.body.requesterUserId || '').trim();
+    const authUser = getDashboardAuthUser(req);
+    const requesterUserId = DISCORD_OAUTH_ENABLED
+      ? String(authUser && authUser.id ? authUser.id : '')
+      : String(req.body.requesterUserId || '').trim();
     const channelId = String(req.body.channelId || '').trim();
     const title = String(req.body.title || '').trim();
     const description = String(req.body.description || '').trim();
     const colorRaw = String(req.body.color || '#2b8cff').trim();
     if (!requesterUserId || !channelId || !title || !description) {
       return res.status(400).json({ error: 'requesterUserId, channelId, title, description required' });
+    }
+    if (DISCORD_OAUTH_ENABLED && !authUser) {
+      return res.status(401).json({ error: 'Discord login required' });
     }
     const requesterMember = await guild.members.fetch(requesterUserId).catch(() => null);
     if (!requesterMember || !isOperationsManagerMember(requesterMember, guildState)) {
@@ -1274,9 +1470,15 @@ function startDashboardServer() {
       return res.status(404).json({ error: 'Guild not found' });
     }
     const guildState = ensureGuild(guild.id);
-    const requesterUserId = String(req.body.requesterUserId || '').trim();
+    const authUser = getDashboardAuthUser(req);
+    const requesterUserId = DISCORD_OAUTH_ENABLED
+      ? String(authUser && authUser.id ? authUser.id : '')
+      : String(req.body.requesterUserId || '').trim();
     if (!requesterUserId) {
       return res.status(400).json({ error: 'requesterUserId required' });
+    }
+    if (DISCORD_OAUTH_ENABLED && !authUser) {
+      return res.status(401).json({ error: 'Discord login required' });
     }
     const requesterMember = await guild.members.fetch(requesterUserId).catch(() => null);
     if (!requesterMember || !isOperationsManagerMember(requesterMember, guildState)) {
@@ -2453,6 +2655,9 @@ if (!DASHBOARD_TOKEN) {
 }
 if (!MASTER_DASHBOARD_TOKEN) {
   console.warn('[dashboard] MASTER_DASHBOARD_TOKEN is empty. Master API will be disabled.');
+}
+if (!DISCORD_OAUTH_ENABLED) {
+  console.warn('[dashboard] Discord OAuth is disabled. Set DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_URI.');
 }
 startDashboardServer();
 
