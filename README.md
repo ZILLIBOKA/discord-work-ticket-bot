@@ -4,16 +4,17 @@
 
 ## 1. 현재 기능
 - `/open` 모달 티켓 생성
-  - `Job Ticket`: Date, TS(Trainset), Train Location(Car/Part), Fault
+  - `Job Ticket`: Date, TS(Trainset), Location(Car/Part), Fault
   - `Material Use Ticket`: Date, Job No, Material with S/N
   - `Defected Material Ticket`: Date, Job No, Defected Material with S/N
+  - `Asset/Material Request Ticket`: Date, Requested Asset/Material, Quantity, Request Details
   - `General Ticket`: Date, Inquiry Details
-- 티켓 채널 생성 / Claim / Close
+- 티켓 채널 생성 / Close
 - Ticket Live / Ticket History 조회
 - Dashboard 탭 구조
   - `Overview`: 사용자/역할 목록, Live, History
-  - `Operations`: 임베드 공지, 티켓 번호 재정렬
-  - `Master`: 전체 길드 상태 + Operations 권한 설정
+  - `Operations`: 티켓 번호 재정렬
+  - `Master`: 임베드 공지 전송 + Operations 권한 설정
 - Discord OAuth 로그인 연동
 - Master 접근 제한: Technical Lead 계정만 허용
 
@@ -35,6 +36,7 @@
 ```env
 DISCORD_TOKEN=...
 DASHBOARD_TOKEN=...
+BOT_DATA_PATH=/data/bot-data.json
 
 # Discord OAuth2
 DISCORD_CLIENT_ID=...
@@ -54,6 +56,7 @@ ENABLE_MESSAGE_CONTENT_INTENT=false
 ### 변수 설명
 - `DISCORD_TOKEN`: 봇 로그인 토큰
 - `DASHBOARD_TOKEN`: 일반 Dashboard API 토큰
+- `BOT_DATA_PATH`: 티켓/설정 영구 저장 파일 경로
 - `DISCORD_CLIENT_ID/SECRET/REDIRECT_URI`: OAuth 로그인용
 - `TECHNICAL_LEAD_ROLE_ID`: Master 탭 접근 허용 역할 ID(권장)
 - `TECHNICAL_LEAD_ROLE_NAME`: Master 탭 접근 허용 역할명(기본: `Technical Lead`)
@@ -70,9 +73,11 @@ node index.js
 ## 5. Koyeb 배포 기준 순서
 1. GitHub 최신 `main` 배포
 2. Koyeb Service Environment Variables 설정
-3. `DISCORD_REDIRECT_URI`가 실제 Koyeb 도메인과 정확히 일치하는지 확인
-4. Deploy
-5. Dashboard 접속 후
+3. Koyeb Volume 생성 후 서비스에 마운트(예: `/data`)
+4. 환경변수 `BOT_DATA_PATH=/data/bot-data.json` 설정
+5. `DISCORD_REDIRECT_URI`가 실제 Koyeb 도메인과 정확히 일치하는지 확인
+6. Deploy
+7. Dashboard 접속 후
 - `DASHBOARD_TOKEN` 저장(비 OAuth 백업 모드에서만 사용)
 - `Discord Login` 수행
 - (로그인 계정이 해당 길드에서 Technical Lead 역할이면) `Master` 탭 접근 가능
@@ -85,15 +90,13 @@ node index.js
 - Ticket History 확인/검색
 
 ### 6.2 Operations
-- 임베드 공지 전송
-  - OAuth 로그인 사용 시 로그인 계정으로 권한 체크
 - Ticket Number Maintenance
-  - 잘못 생성된 티켓 번호 입력(예: `3,7,15`)
+  - Ticket History에서 체크박스로 잘못 생성된 번호 선택
   - 제거 후 전체 번호 재정렬
 - Operations 권한 계정/역할만 실행 가능
 
 ### 6.3 Master
-- 전체 길드 티켓 ON/OFF
+- 임베드 공지 전송
 - 길드별 Operations 사용자/역할 추가/제거
 - Master 접근 조건
   1. Discord 로그인
@@ -101,11 +104,9 @@ node index.js
 
 ## 7. Discord 명령
 - `/open`
-- `/claim`
 - `/close`
 - `/ticketstatus`
 - `/ticketpanel`
-- `/manager`
 
 ## 8. 문제 해결
 - Master 탭이 안 열림

@@ -52,13 +52,16 @@ const REGISTER_GLOBAL_SLASH_COMMANDS = /^(1|true|yes)$/i.test(String(process.env
 const PRUNE_GLOBAL_SLASH_COMMANDS = /^(1|true|yes)$/i.test(String(process.env.PRUNE_GLOBAL_SLASH_COMMANDS || 'true'));
 const ENABLE_GUILD_MEMBERS_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_GUILD_MEMBERS_INTENT || 'false'));
 const ENABLE_MESSAGE_CONTENT_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_MESSAGE_CONTENT_INTENT || 'false'));
+const BOT_DATA_PATH = String(process.env.BOT_DATA_PATH || '').trim();
 
 if (!TOKEN) {
   console.error('Missing DISCORD_TOKEN in environment');
   process.exit(1);
 }
 
-const DATA_PATH = path.join(__dirname, 'data', 'bot-data.json');
+const DATA_PATH = BOT_DATA_PATH
+  ? path.resolve(BOT_DATA_PATH)
+  : path.join(__dirname, 'data', 'bot-data.json');
 const DASHBOARD_DIR = path.join(__dirname, 'dashboard');
 
 const TICKET_SCHEMAS = {
@@ -2743,6 +2746,7 @@ if (!DISCORD_OAUTH_ENABLED) {
 if (!TECHNICAL_LEAD_ROLE_ID && !TECHNICAL_LEAD_ROLE_NAME) {
   console.warn('[dashboard] TECHNICAL_LEAD_ROLE_ID/TECHNICAL_LEAD_ROLE_NAME is empty. Master access will be blocked.');
 }
+console.log(`[db] data path: ${DATA_PATH}`);
 startDashboardServer();
 
 client.login(TOKEN);
