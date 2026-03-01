@@ -473,25 +473,6 @@ function restartAutoRefresh() {
   }, interval);
 }
 
-function renderMasterTable() {
-  const tbody = $('masterGuildTable').querySelector('tbody');
-  tbody.innerHTML = '';
-  const guilds = (state.masterData && state.masterData.guilds) || [];
-  if (!guilds.length) {
-    renderEmptyRow(tbody, 6, '마스터 데이터가 없습니다.');
-    return;
-  }
-
-  for (const g of guilds) {
-    const opText = `${g.operatorUsers || 0} users / ${g.operatorRoles || 0} roles`;
-    const toggleLabel = g.ticketEnabled ? 'OFF' : 'ON';
-    const toggleClass = g.ticketEnabled ? 'btn-danger' : 'btn-primary';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(g.guildName)}</td><td>${g.ticketEnabled ? '<span class="chip ok">ON</span>' : '<span class="chip warn">OFF</span>'}</td><td>${g.openTickets || 0}</td><td>${g.closedTickets || 0}</td><td>${escapeHtml(opText)}</td><td><button class="btn ${toggleClass}" data-master-toggle="${escapeHtml(g.guildId)}">${toggleLabel}</button></td>`;
-    tbody.appendChild(tr);
-  }
-}
-
 function fillMasterGuildSelect() {
   const guildRows = (state.masterData && state.masterData.guilds || []).map((g) => ({ id: g.guildId, name: g.guildName }));
   const saved = localStorage.getItem('masterOperatorGuildId') || '';
@@ -508,9 +489,8 @@ async function loadMasterData() {
   const guildCount = data.bot && Number.isInteger(data.bot.guildCount) ? data.bot.guildCount : 0;
   const totalOpen = data.summary && Number.isInteger(data.summary.totalOpen) ? data.summary.totalOpen : 0;
   const totalClosed = data.summary && Number.isInteger(data.summary.totalClosed) ? data.summary.totalClosed : 0;
-  $('masterSummary').textContent = `Bot: ${botTag} | Guilds: ${guildCount} | Open: ${totalOpen} | Closed: ${totalClosed}`;
+  $('masterSummary').textContent = `Bot: ${botTag} | Guilds: ${guildCount} | Open: ${totalOpen} | Closed: ${totalClosed} | Mode: Operations Permission`;
   fillMasterGuildSelect();
-  renderMasterTable();
   await loadMasterActors();
 }
 
@@ -736,24 +716,6 @@ $('runResequence').addEventListener('click', async () => {
   }
 });
 
-$('masterEnableAll').addEventListener('click', async () => {
-  try {
-    await apiMaster('/api/master/tickets-enabled', { method: 'POST', body: JSON.stringify({ enabled: true }) });
-    await loadMasterData();
-  } catch (error) {
-    setStatus(`전체 ON 실패: ${error.message}`, 'error');
-  }
-});
-
-$('masterDisableAll').addEventListener('click', async () => {
-  try {
-    await apiMaster('/api/master/tickets-enabled', { method: 'POST', body: JSON.stringify({ enabled: false }) });
-    await loadMasterData();
-  } catch (error) {
-    setStatus(`전체 OFF 실패: ${error.message}`, 'error');
-  }
-});
-
 $('masterOperatorGuild').addEventListener('change', async () => {
   localStorage.setItem('masterOperatorGuildId', $('masterOperatorGuild').value || '');
   try {
@@ -826,23 +788,6 @@ $('masterRemoveOperatorRole').addEventListener('click', async () => {
     await refreshMasterActors(guildId);
   } catch (error) {
     setStatus(`Operations 역할 제거 실패: ${error.message}`, 'error');
-  }
-});
-
-$('masterGuildTable').addEventListener('click', async (ev) => {
-  const target = ev.target;
-  if (!target || !target.dataset || !target.dataset.masterToggle) return;
-  const guildId = target.dataset.masterToggle;
-  const guild = (state.masterData && state.masterData.guilds || []).find((g) => g.guildId === guildId);
-  if (!guild) return;
-  try {
-    await apiMaster(`/api/master/guilds/${guildId}/tickets-enabled`, {
-      method: 'POST',
-      body: JSON.stringify({ enabled: !guild.ticketEnabled })
-    });
-    await loadMasterData();
-  } catch (error) {
-    setStatus(`길드 티켓 상태 변경 실패: ${error.message}`, 'error');
   }
 });
 
