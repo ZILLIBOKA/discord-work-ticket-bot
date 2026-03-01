@@ -394,13 +394,6 @@ function canOpenTicket(member, guildState, ticketType) {
   return memberHasRole(member, guildState.tickets.technicianRoleId);
 }
 
-function canProcessTicket(member, guildState) {
-  if (!member) {
-    return false;
-  }
-  return isTicketManagerMember(member, guildState);
-}
-
 function buildTicketSummary(meta) {
   const answers = Array.isArray(meta && meta.intake) ? meta.intake : [];
   const typeKey = String((meta && meta.ticketType) || 'general');
@@ -627,7 +620,6 @@ async function createTicketChannel(guild, opener, sourceChannel, intakeAnswers, 
   saveDb();
 
   const controls = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('ticket_claim').setLabel('Claim').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('ticket_close').setLabel('Close').setStyle(ButtonStyle.Danger)
   );
 
@@ -927,7 +919,6 @@ function buildSlashCommands() {
             { name: 'Asset/Material Request Ticket', value: 'asset_material_request' },
             { name: 'General Ticket', value: 'general' }
           )),
-    new SlashCommandBuilder().setName('claim').setDescription('Claim current ticket channel'),
     new SlashCommandBuilder()
       .setName('close')
       .setDescription('Close current ticket channel')
@@ -949,21 +940,6 @@ function buildSlashCommands() {
             { name: 'Asset/Material Request Ticket', value: 'asset_material_request' },
             { name: 'General Ticket', value: 'general' }
           )),
-    new SlashCommandBuilder()
-      .setName('manager')
-      .setDescription('Manage ticket managers')
-      .addStringOption((o) =>
-        o
-          .setName('action')
-          .setDescription('Action')
-          .setRequired(true)
-          .addChoices(
-            { name: 'list', value: 'list' },
-            { name: 'add', value: 'add' },
-            { name: 'remove', value: 'remove' }
-          ))
-      .addUserOption((o) => o.setName('user').setDescription('Target user').setRequired(false))
-      .addRoleOption((o) => o.setName('role').setDescription('Target role').setRequired(false))
   ].map((c) => c.toJSON());
 }
 
@@ -1923,66 +1899,9 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    if (name === 'manager') {
-      if (!canModerate(member)) {
-        await interaction.reply({ content: 'No permission.', ephemeral: true }).catch(() => {});
-        return;
-      }
-      const action = String(interaction.options.getString('action', true));
-      if (action === 'list') {
-        const users = (guildState.tickets.managerUserIds || []).map((id) => `<@${id}>`).join(', ') || 'None';
-        const roles = (guildState.tickets.managerRoleIds || []).map((id) => `<@&${id}>`).join(', ') || 'None';
-        await interaction.reply({ content: `Manager users: ${users}\nManager roles: ${roles}`, ephemeral: true }).catch(() => {});
-        return;
-      }
-
-      const user = interaction.options.getUser('user');
-      const role = interaction.options.getRole('role');
-      if (!user && !role) {
-        await interaction.reply({ content: 'Need target user or role.', ephemeral: true }).catch(() => {});
-        return;
-      }
-
-      if (user) {
-        const set = new Set(guildState.tickets.managerUserIds || []);
-        if (action === 'add') {
-          set.add(String(user.id));
-        } else {
-          set.delete(String(user.id));
-        }
-        guildState.tickets.managerUserIds = Array.from(set);
-        await applyAccessToOpenTickets(interaction.guild, user.id, action === 'add');
-      }
-      if (role) {
-        const set = new Set(guildState.tickets.managerRoleIds || []);
-        if (action === 'add') {
-          set.add(String(role.id));
-        } else {
-          set.delete(String(role.id));
-        }
-        guildState.tickets.managerRoleIds = Array.from(set);
-        await applyAccessToOpenTickets(interaction.guild, role.id, action === 'add');
-      }
-      saveDb();
-      await interaction.reply({ content: `Manager updated (${action}).`, ephemeral: true }).catch(() => {});
-      return;
-    }
-
     const meta = guildState.ticketChannels[channel.id];
     if (!meta) {
       await interaction.reply({ content: 'Use this command inside a ticket channel.', ephemeral: true }).catch(() => {});
-      return;
-    }
-
-    if (name === 'claim') {
-      if (!canProcessTicket(member, guildState)) {
-        await interaction.reply({ content: 'Only support/admin can claim tickets.', ephemeral: true }).catch(() => {});
-        return;
-      }
-      meta.claimedBy = interaction.user.id;
-      meta.claimedAt = Date.now();
-      saveDb();
-      await interaction.reply({ content: `Ticket claimed by ${interaction.user}` }).catch(() => {});
       return;
     }
 
@@ -2059,20 +1978,6 @@ client.on('interactionCreate', async (interaction) => {
   const meta = guildState.ticketChannels[channel.id];
   if (!meta) {
     await interaction.reply({ content: 'This is not an active ticket channel.', ephemeral: true }).catch(() => {});
-    return;
-  }
-
-  if (interaction.customId === 'ticket_claim') {
-    if (!canProcessTicket(member, guildState)) {
-      await interaction.reply({ content: 'Only support/admin can claim tickets.', ephemeral: true });
-      return;
-    }
-
-    meta.claimedBy = member.id;
-    meta.claimedAt = Date.now();
-    saveDb();
-    await interaction.reply(`Ticket claimed by ${interaction.user}`).catch(() => {});
-    await sendLog(interaction.guild, `🎯 Ticket claimed: ${channel.name} by ${interaction.user.tag}`);
     return;
   }
 
@@ -2236,8 +2141,8 @@ client.on('messageCreate', async (message) => {
       `Basic: ping, status, rank, leaderboard`,
       `Moderation: warn, warnings, clearwarnings, mute, unmute, cleanup, slowmode`,
       `Config: setprefix, setlog, setwelcome, automod, custom, autorole`,
-      `Tickets(legacy prefix): ticket panel, ticket claim, ticket close, ticket manager`,
-      `Tickets(recommended slash): /open, /claim, /close, /ticketstatus, /ticketpanel, /manager`,
+      `Tickets(legacy prefix): ticket panel, ticket close`,
+      `Tickets(recommended slash): /open, /close, /ticketstatus, /ticketpanel`,
       `Utility: announce, say`,
       `Examples: ${prefix}automod word add spamword, ${prefix}autorole add <msgId> 😀 <roleId>`
     ].join('\n'));
@@ -2592,23 +2497,6 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
-    if (sub === 'claim') {
-      const meta = guildState.ticketChannels[message.channel.id];
-      if (!meta) {
-        await message.reply('Use this command inside a ticket channel.');
-        return;
-      }
-      if (!canProcessTicket(member, guildState)) {
-        await message.reply('Only support/admin can claim tickets.');
-        return;
-      }
-      meta.claimedBy = message.author.id;
-      meta.claimedAt = Date.now();
-      saveDb();
-      await message.reply(`Ticket claimed by ${message.author}`);
-      return;
-    }
-
     if (sub === 'pushjob') {
       await message.reply('Disabled. Handle Google Sheet updates manually.');
       return;
@@ -2775,59 +2663,10 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
-    if (sub === 'manager') {
-      const action = (args[1] || '').toLowerCase();
-      if (action === 'list') {
-        const users = (guildState.tickets.managerUserIds || []).map((id) => `<@${id}>`).join(', ') || 'None';
-        const roles = (guildState.tickets.managerRoleIds || []).map((id) => `<@&${id}>`).join(', ') || 'None';
-        await message.reply(`Manager users: ${users}\nManager roles: ${roles}`);
-        return;
-      }
-      if (action === 'add' || action === 'remove') {
-        const user = message.mentions.users.first();
-        const role = parseRoleFromArg(message, args[2]);
-        if (!user && !role) {
-          await message.reply(`Usage: ${prefix}ticket manager add|remove <@user|@role>`);
-          return;
-        }
-        if (user) {
-          const set = new Set(guildState.tickets.managerUserIds || []);
-          if (action === 'add') {
-            set.add(String(user.id));
-          } else {
-            set.delete(String(user.id));
-          }
-          guildState.tickets.managerUserIds = Array.from(set);
-          await applyAccessToOpenTickets(message.guild, user.id, action === 'add');
-        }
-        if (role) {
-          const set = new Set(guildState.tickets.managerRoleIds || []);
-          if (action === 'add') {
-            set.add(String(role.id));
-          } else {
-            set.delete(String(role.id));
-          }
-          guildState.tickets.managerRoleIds = Array.from(set);
-          await applyAccessToOpenTickets(message.guild, role.id, action === 'add');
-        }
-        saveDb();
-        await message.reply(`Manager updated (${action}).`);
-        return;
-      }
-      await message.reply([
-        `Ticket manager usage:`,
-        `${prefix}ticket manager list`,
-        `${prefix}ticket manager add <@user|@role>`,
-        `${prefix}ticket manager remove <@user|@role>`
-      ].join('\n'));
-      return;
-    }
-
     await message.reply([
       `Ticket usage:`,
       `Use slash: /open`,
       `${prefix}ticket close [reason]`,
-      `${prefix}ticket claim`,
       `${prefix}ticket status`,
       `${prefix}ticket panel`,
       `${prefix}ticket enable on|off`,
@@ -2837,8 +2676,7 @@ client.on('messageCreate', async (message) => {
       `${prefix}ticket support <roleId|@role|off>`,
       `${prefix}ticket forum <forumChannelId|#forum|off>`,
       `${prefix}ticket log <#channel|off>`,
-      `${prefix}ticket sheet <spreadsheetId|off> [range]`,
-      `${prefix}ticket manager list|add|remove`
+      `${prefix}ticket sheet <spreadsheetId|off> [range]`
     ].join('\n'));
     return;
   }

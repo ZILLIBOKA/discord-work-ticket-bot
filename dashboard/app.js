@@ -314,11 +314,7 @@ function renderEmptyRow(tbody, colCount, text) {
 }
 
 function ticketStatusChip(t) {
-  if (t.claimedBy) {
-    const who = t.claimedByTag || t.claimedBy;
-    return `<span class="chip ok">Claimed · ${escapeHtml(who)}</span>`;
-  }
-  return '<span class="chip warn">Open · Unassigned</span>';
+  return '<span class="chip warn">Open</span>';
 }
 
 function switchTab(tab) {
