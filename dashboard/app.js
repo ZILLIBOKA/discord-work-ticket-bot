@@ -294,12 +294,12 @@ function renderMasterIssuerStats(stats) {
   tbody.innerHTML = '';
   const rows = Array.isArray(stats) ? stats : [];
   if (rows.length === 0) {
-    renderEmptyRow(tbody, 6, '티켓 발행 통계가 없습니다.');
+    renderEmptyRow(tbody, 7, '티켓 발행 통계가 없습니다.');
     return;
   }
   for (const row of rows) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(row.ownerName || row.ownerId || '-')}<br><span class="fine">${escapeHtml(row.ownerId || '')}</span></td><td>${row.job || 0}</td><td>${row.material_use || 0}</td><td>${row.defected_material || 0}</td><td>${row.general || 0}</td><td><strong>${row.total || 0}</strong></td>`;
+    tr.innerHTML = `<td>${escapeHtml(row.ownerName || row.ownerId || '-')}<br><span class="fine">${escapeHtml(row.ownerId || '')}</span></td><td>${escapeHtml(row.ownerRole || '@everyone')}</td><td>${row.job || 0}</td><td>${row.material_use || 0}</td><td>${row.defected_material || 0}</td><td>${row.general || 0}</td><td><strong>${row.total || 0}</strong></td>`;
     tbody.appendChild(tr);
   }
 }

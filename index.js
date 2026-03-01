@@ -1456,6 +1456,22 @@ function startDashboardServer() {
     ];
     const typeKeys = ['job', 'material_use', 'defected_material', 'general'];
     const issuerMap = new Map();
+
+    for (const member of guild.members.cache.filter((m) => !m.user.bot).values()) {
+      const highestRole = member.roles && member.roles.highest ? member.roles.highest : null;
+      issuerMap.set(String(member.id), {
+        ownerId: String(member.id),
+        ownerName: member.displayName || (member.user && member.user.username) || String(member.id),
+        ownerRole: highestRole ? String(highestRole.name || '@everyone') : '@everyone',
+        highestRolePosition: highestRole ? Number(highestRole.position || 0) : 0,
+        job: 0,
+        material_use: 0,
+        defected_material: 0,
+        general: 0,
+        total: 0
+      });
+    }
+
     for (const ticket of allTickets) {
       const ownerId = String(ticket && ticket.ownerId ? ticket.ownerId : '').trim();
       if (!ownerId) {
@@ -1465,12 +1481,15 @@ function startDashboardServer() {
       let row = issuerMap.get(ownerId);
       if (!row) {
         const member = guild.members.cache.get(ownerId);
+        const highestRole = member && member.roles && member.roles.highest ? member.roles.highest : null;
         const displayName = member
           ? (member.displayName || (member.user && member.user.username) || ownerId)
           : ownerId;
         row = {
           ownerId,
           ownerName: displayName,
+          ownerRole: highestRole ? String(highestRole.name || '@everyone') : '@everyone',
+          highestRolePosition: highestRole ? Number(highestRole.position || 0) : 0,
           job: 0,
           material_use: 0,
           defected_material: 0,
@@ -1488,6 +1507,9 @@ function startDashboardServer() {
     }
     const issuerStats = Array.from(issuerMap.values())
       .sort((a, b) => {
+        if ((b.highestRolePosition || 0) !== (a.highestRolePosition || 0)) {
+          return (b.highestRolePosition || 0) - (a.highestRolePosition || 0);
+        }
         if ((b.total || 0) !== (a.total || 0)) {
           return (b.total || 0) - (a.total || 0);
         }
