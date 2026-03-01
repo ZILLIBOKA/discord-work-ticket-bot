@@ -974,10 +974,11 @@ function serializeTicket(guild, channelId, ticket) {
   const channel = guild.channels.cache.get(channelId);
   const summary = buildTicketSummary(ticket);
   const claimedMember = ticket && ticket.claimedBy ? guild.members.cache.get(String(ticket.claimedBy)) : null;
+  const parsedTicketNo = Number.parseInt(String(ticket && ticket.ticketNo ? ticket.ticketNo : ''), 10);
   return {
     channelId,
     channelName: channel ? channel.name : ticket.channelName || '(deleted)',
-    ticketNo: ticket.ticketNo || null,
+    ticketNo: Number.isInteger(parsedTicketNo) && parsedTicketNo > 0 ? parsedTicketNo : null,
     ticketType: ticket.ticketType || 'general',
     ticketTypeLabel: summary.ticketTypeLabel,
     ownerId: ticket.ownerId || '',
@@ -1036,6 +1037,33 @@ function resequenceTickets(guildState, removeTicketNos) {
     ticketNo += 1;
   }
   guildState.tickets.nextTicketNo = ticketNo;
+}
+
+function ensureTicketNumbers(guildState) {
+  const seen = new Set();
+  let maxNo = 0;
+  let needResequence = false;
+  const records = Object.values(guildState.ticketChannels || {}).concat(guildState.tickets.history || []);
+
+  for (const meta of records) {
+    const ticketNo = Number.parseInt(String(meta && meta.ticketNo ? meta.ticketNo : ''), 10);
+    if (!Number.isInteger(ticketNo) || ticketNo <= 0 || seen.has(ticketNo)) {
+      needResequence = true;
+      break;
+    }
+    seen.add(ticketNo);
+    if (ticketNo > maxNo) {
+      maxNo = ticketNo;
+    }
+  }
+
+  if (needResequence) {
+    resequenceTickets(guildState, []);
+    return true;
+  }
+
+  guildState.tickets.nextTicketNo = Math.max(1, maxNo + 1);
+  return false;
 }
 
 function startDashboardServer() {
@@ -1170,6 +1198,10 @@ function startDashboardServer() {
       return res.status(404).json({ error: 'Guild not found' });
     }
     const guildState = ensureGuild(guild.id);
+    const normalizedTicketNumbers = ensureTicketNumbers(guildState);
+    if (normalizedTicketNumbers) {
+      saveDb();
+    }
     const authUser = getDashboardAuthUser(req);
 
     const fetchedChannels = await guild.channels.fetch().catch(() => null);
@@ -1679,6 +1711,11 @@ async function closeTicketChannel(channel, closedBy, reason) {
   const meta = guildState.ticketChannels[channel.id];
   if (!meta) {
     return false;
+  }
+  const parsedNo = Number.parseInt(String(meta.ticketNo || ''), 10);
+  if (!Number.isInteger(parsedNo) || parsedNo <= 0) {
+    meta.ticketNo = Number(guildState.tickets.nextTicketNo || 1);
+    guildState.tickets.nextTicketNo = Number(meta.ticketNo) + 1;
   }
 
   meta.status = 'closed';
