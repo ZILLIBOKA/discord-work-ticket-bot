@@ -6,6 +6,7 @@ const state = {
   oauthEnabled: false,
   authUser: null,
   technicalLead: false,
+  technicalLeadGuilds: [],
   guildId: '',
   data: null,
   masterData: null,
@@ -126,6 +127,12 @@ function renderAuthStatus() {
     $('discordLoginBtn').style.opacity = '1';
     $('discordLogoutBtn').style.opacity = '1';
   }
+  const leadGuildText = state.technicalLeadGuilds.length
+    ? state.technicalLeadGuilds.map((g) => g.guildName).join(', ')
+    : '없음';
+  if ($('masterLeadMatchInfo')) {
+    $('masterLeadMatchInfo').textContent = `Technical Lead 매칭 길드: ${leadGuildText}`;
+  }
   applyAuthUserToInputs();
 }
 
@@ -140,10 +147,12 @@ async function loadAuthUser() {
     const data = await res.json();
     state.authUser = data && data.user ? data.user : null;
     state.technicalLead = !!(data && data.technicalLead);
+    state.technicalLeadGuilds = Array.isArray(data && data.technicalLeadGuilds) ? data.technicalLeadGuilds : [];
     renderAuthStatus();
   } catch (_error) {
     state.authUser = null;
     state.technicalLead = false;
+    state.technicalLeadGuilds = [];
     renderAuthStatus();
   }
 }

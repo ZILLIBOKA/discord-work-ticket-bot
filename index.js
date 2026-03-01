@@ -825,6 +825,23 @@ async function hasTechnicalLeadInAnyGuild(userId) {
   return false;
 }
 
+async function getTechnicalLeadGuildMatches(userId) {
+  if (!userId) {
+    return [];
+  }
+  const out = [];
+  const guilds = Array.from(client.guilds.cache.values());
+  for (const guild of guilds) {
+    // eslint-disable-next-line no-await-in-loop
+    const ok = await hasTechnicalLeadInGuild(guild, userId);
+    if (ok) {
+      out.push({ guildId: guild.id, guildName: guild.name });
+    }
+  }
+  out.sort((a, b) => a.guildName.localeCompare(b.guildName));
+  return out;
+}
+
 async function requireMasterDashboardToken(req, res, next) {
   if (!MASTER_DASHBOARD_TOKEN) {
     return res.status(503).json({ error: 'Master dashboard token is not configured' });
@@ -1012,13 +1029,15 @@ function startDashboardServer() {
 
   app.get('/api/auth/me', async (req, res) => {
     const user = getDashboardAuthUser(req);
-    const technicalLead = user && user.id
-      ? await hasTechnicalLeadInAnyGuild(user.id)
-      : false;
+    const technicalLeadGuilds = user && user.id
+      ? await getTechnicalLeadGuildMatches(user.id)
+      : [];
+    const technicalLead = technicalLeadGuilds.length > 0;
     res.json({
       ok: true,
       user,
-      technicalLead
+      technicalLead,
+      technicalLeadGuilds
     });
   });
 
