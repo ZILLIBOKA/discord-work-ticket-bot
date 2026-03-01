@@ -7,6 +7,7 @@ const state = {
   authUser: null,
   technicalLead: false,
   technicalLeadGuilds: [],
+  operationsManager: false,
   guildId: '',
   data: null,
   masterData: null,
@@ -110,8 +111,6 @@ function applyAuthUserToInputs() {
 }
 
 function renderAuthStatus() {
-  $('masterTabBtn').disabled = !state.technicalLead;
-  $('masterTabBtn').style.opacity = state.technicalLead ? '1' : '0.5';
   if (state.authUser && state.authUser.id) {
     const label = state.authUser.globalName || state.authUser.username || state.authUser.id;
     const leadText = state.technicalLead ? 'Technical Lead' : 'General User';
@@ -133,7 +132,25 @@ function renderAuthStatus() {
   if ($('masterLeadMatchInfo')) {
     $('masterLeadMatchInfo').textContent = `Technical Lead 매칭 길드: ${leadGuildText}`;
   }
+  updateTabPermissions();
   applyAuthUserToInputs();
+}
+
+function updateTabPermissions() {
+  const canMaster = !!state.technicalLead;
+  const canOps = !!state.operationsManager;
+
+  $('masterTabBtn').disabled = !canMaster;
+  $('masterTabBtn').style.opacity = canMaster ? '1' : '0.5';
+  $('opsTabBtn').disabled = !canOps;
+  $('opsTabBtn').style.opacity = canOps ? '1' : '0.5';
+
+  if (state.activeTab === 'master' && !canMaster) {
+    switchTab('overview');
+  }
+  if (state.activeTab === 'ops' && !canOps) {
+    switchTab('overview');
+  }
 }
 
 async function loadAuthUser() {
@@ -148,11 +165,15 @@ async function loadAuthUser() {
     state.authUser = data && data.user ? data.user : null;
     state.technicalLead = !!(data && data.technicalLead);
     state.technicalLeadGuilds = Array.isArray(data && data.technicalLeadGuilds) ? data.technicalLeadGuilds : [];
+    if (!state.authUser) {
+      state.operationsManager = false;
+    }
     renderAuthStatus();
   } catch (_error) {
     state.authUser = null;
     state.technicalLead = false;
     state.technicalLeadGuilds = [];
+    state.operationsManager = false;
     renderAuthStatus();
   }
 }
@@ -343,6 +364,13 @@ async function loadData() {
 
   const data = await api(`/api/guilds/${state.guildId}/data`);
   state.data = data;
+  state.operationsManager = !!(
+    data &&
+    data.auth &&
+    data.auth.permissions &&
+    data.auth.permissions.loggedIn &&
+    data.auth.permissions.operationsManager
+  );
 
   const savedEmbedChannelId = localStorage.getItem(guildStorageKey('embedChannelId')) || '';
   const savedEmbedRequester = localStorage.getItem(guildStorageKey('embedRequesterUserId')) || '';
@@ -373,8 +401,11 @@ async function loadData() {
   let status = `길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 채널 ${available}개 · 사용자 ${memberCount}명 · 역할 ${roleCount}개`;
   if (data.auth && data.auth.permissions && data.auth.permissions.loggedIn) {
     status += data.auth.permissions.operationsManager ? ' · Operations 권한 있음' : ' · Operations 권한 없음';
+  } else {
+    status += ' · 로그인 필요';
   }
   setStatus(status);
+  updateTabPermissions();
 }
 
 function restartAutoRefresh() {
@@ -534,13 +565,19 @@ $('liveToggle').addEventListener('change', restartAutoRefresh);
 $('liveInterval').addEventListener('change', restartAutoRefresh);
 
 $('overviewTabBtn').addEventListener('click', () => switchTab('overview'));
-$('opsTabBtn').addEventListener('click', () => switchTab('ops'));
 $('masterTabBtn').addEventListener('click', () => {
   if (!state.technicalLead) {
     setStatus('Master 탭은 Technical Lead만 접근할 수 있습니다.', 'error');
     return;
   }
   switchTab('master');
+});
+$('opsTabBtn').addEventListener('click', () => {
+  if (!state.operationsManager) {
+    setStatus('Operations 탭은 Operations 권한 사용자만 접근할 수 있습니다.', 'error');
+    return;
+  }
+  switchTab('ops');
 });
 $('discordLoginBtn').addEventListener('click', () => {
   if (!state.oauthEnabled) {
@@ -560,7 +597,14 @@ $('discordLogoutBtn').addEventListener('click', async () => {
   try {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
     state.authUser = null;
+    state.technicalLead = false;
+    state.technicalLeadGuilds = [];
+    state.operationsManager = false;
     renderAuthStatus();
+    switchTab('overview');
+    if (state.token && state.guildId) {
+      await loadData().catch(() => {});
+    }
     setStatus('Discord 로그아웃 완료');
   } catch (error) {
     setStatus(`로그아웃 실패: ${error.message}`, 'error');
