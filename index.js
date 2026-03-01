@@ -45,10 +45,8 @@ const DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || '').trim();
 const DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
 const DISCORD_REDIRECT_URI = String(process.env.DISCORD_REDIRECT_URI || '').trim();
 const DISCORD_OAUTH_ENABLED = !!(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET && DISCORD_REDIRECT_URI);
-const TECHNICAL_LEAD_USER_IDS = String(process.env.TECHNICAL_LEAD_USER_IDS || process.env.TECHNICAL_LEAD_USER_ID || '')
-  .split(',')
-  .map((x) => x.trim())
-  .filter(Boolean);
+const TECHNICAL_LEAD_ROLE_ID = String(process.env.TECHNICAL_LEAD_ROLE_ID || '').trim();
+const TECHNICAL_LEAD_ROLE_NAME = String(process.env.TECHNICAL_LEAD_ROLE_NAME || 'Technical Lead').trim();
 const SLASH_GUILD_ID = String(process.env.SLASH_GUILD_ID || '').trim();
 const ENABLE_GUILD_MEMBERS_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_GUILD_MEMBERS_INTENT || 'false'));
 const ENABLE_MESSAGE_CONTENT_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_MESSAGE_CONTENT_INTENT || 'false'));
@@ -786,22 +784,53 @@ function clearDashboardSessionCookie(res) {
   res.setHeader('Set-Cookie', 'dashboard_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
 }
 
-function isTechnicalLeadUserId(userId) {
+function isTechnicalLeadMember(member) {
+  if (!member || !member.roles || !member.roles.cache) {
+    return false;
+  }
+  if (TECHNICAL_LEAD_ROLE_ID && member.roles.cache.has(TECHNICAL_LEAD_ROLE_ID)) {
+    return true;
+  }
+  const roleName = String(TECHNICAL_LEAD_ROLE_NAME || '').toLowerCase();
+  if (!roleName) {
+    return false;
+  }
+  return member.roles.cache.some((role) => String(role.name || '').toLowerCase() === roleName);
+}
+
+async function hasTechnicalLeadInGuild(guild, userId) {
+  if (!guild || !userId) {
+    return false;
+  }
+  await guild.roles.fetch().catch(() => null);
+  const member = guild.members.cache.get(String(userId)) || await guild.members.fetch(String(userId)).catch(() => null);
+  if (!member) {
+    return false;
+  }
+  return isTechnicalLeadMember(member);
+}
+
+async function hasTechnicalLeadInAnyGuild(userId) {
   if (!userId) {
     return false;
   }
-  return TECHNICAL_LEAD_USER_IDS.includes(String(userId));
+  const guilds = Array.from(client.guilds.cache.values());
+  for (const guild of guilds) {
+    // eslint-disable-next-line no-await-in-loop
+    const ok = await hasTechnicalLeadInGuild(guild, userId);
+    if (ok) {
+      return true;
+    }
+  }
+  return false;
 }
 
-function requireMasterDashboardToken(req, res, next) {
+async function requireMasterDashboardToken(req, res, next) {
   if (!MASTER_DASHBOARD_TOKEN) {
     return res.status(503).json({ error: 'Master dashboard token is not configured' });
   }
   if (!DISCORD_OAUTH_ENABLED) {
     return res.status(503).json({ error: 'Discord OAuth is required for Master access' });
-  }
-  if (TECHNICAL_LEAD_USER_IDS.length === 0) {
-    return res.status(503).json({ error: 'TECHNICAL_LEAD_USER_IDS is not configured' });
   }
   const fromHeader = String(req.headers['x-master-token'] || '').trim();
   const fromQuery = String(req.query.masterToken || '').trim();
@@ -810,10 +839,18 @@ function requireMasterDashboardToken(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const authUser = getDashboardAuthUser(req);
-  if (!authUser || !isTechnicalLeadUserId(authUser.id)) {
+  if (!authUser || !authUser.id) {
+    return res.status(401).json({ error: 'Discord login required' });
+  }
+  const targetGuildId = String(req.params && req.params.guildId ? req.params.guildId : '').trim();
+  const guild = targetGuildId ? client.guilds.cache.get(targetGuildId) : null;
+  const allowed = guild
+    ? await hasTechnicalLeadInGuild(guild, authUser.id)
+    : await hasTechnicalLeadInAnyGuild(authUser.id);
+  if (!allowed) {
     return res.status(403).json({ error: 'Master access is allowed only for Technical Lead' });
   }
-  next();
+  return next();
 }
 
 function buildTicketStatusLines(guildState) {
@@ -973,12 +1010,15 @@ function startDashboardServer() {
     });
   });
 
-  app.get('/api/auth/me', (req, res) => {
+  app.get('/api/auth/me', async (req, res) => {
     const user = getDashboardAuthUser(req);
+    const technicalLead = user && user.id
+      ? await hasTechnicalLeadInAnyGuild(user.id)
+      : false;
     res.json({
       ok: true,
       user,
-      technicalLead: !!(user && isTechnicalLeadUserId(user.id))
+      technicalLead
     });
   });
 
@@ -2684,8 +2724,8 @@ if (!MASTER_DASHBOARD_TOKEN) {
 if (!DISCORD_OAUTH_ENABLED) {
   console.warn('[dashboard] Discord OAuth is disabled. Set DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_URI.');
 }
-if (TECHNICAL_LEAD_USER_IDS.length === 0) {
-  console.warn('[dashboard] TECHNICAL_LEAD_USER_IDS is empty. Master access will be blocked.');
+if (!TECHNICAL_LEAD_ROLE_ID && !TECHNICAL_LEAD_ROLE_NAME) {
+  console.warn('[dashboard] TECHNICAL_LEAD_ROLE_ID/TECHNICAL_LEAD_ROLE_NAME is empty. Master access will be blocked.');
 }
 startDashboardServer();
 

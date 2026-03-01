@@ -42,8 +42,9 @@ DISCORD_CLIENT_ID=...
 DISCORD_CLIENT_SECRET=...
 DISCORD_REDIRECT_URI=https://<KOYEB_DOMAIN>/auth/discord/callback
 
-# Master 허용 계정 (콤마 구분 가능)
-TECHNICAL_LEAD_USER_IDS=123456789012345678,987654321098765432
+# Master 허용 역할 (둘 중 하나로 매칭)
+TECHNICAL_LEAD_ROLE_ID=
+TECHNICAL_LEAD_ROLE_NAME=Technical Lead
 
 DASHBOARD_PORT=8787
 SLASH_GUILD_ID=
@@ -56,7 +57,8 @@ ENABLE_MESSAGE_CONTENT_INTENT=false
 - `DASHBOARD_TOKEN`: 일반 Dashboard API 토큰
 - `MASTER_DASHBOARD_TOKEN`: Master API 토큰(추가 보호)
 - `DISCORD_CLIENT_ID/SECRET/REDIRECT_URI`: OAuth 로그인용
-- `TECHNICAL_LEAD_USER_IDS`: Master 탭 접근 허용 Discord 사용자 ID 목록
+- `TECHNICAL_LEAD_ROLE_ID`: Master 탭 접근 허용 역할 ID(권장)
+- `TECHNICAL_LEAD_ROLE_NAME`: Master 탭 접근 허용 역할명(기본: `Technical Lead`)
 
 ## 4. 로컬 실행
 ```bash
@@ -75,7 +77,7 @@ node index.js
 5. Dashboard 접속 후
 - `DASHBOARD_TOKEN` 저장
 - `Discord Login` 수행
-- (Technical Lead 계정이면) `Master` 탭 접근 가능
+- (로그인 계정이 해당 길드에서 Technical Lead 역할이면) `Master` 탭 접근 가능
 
 ## 6. 탭별 사용법
 ### 6.1 Overview
@@ -97,7 +99,7 @@ node index.js
 - 길드별 Operations 사용자/역할 추가/제거
 - Master 접근 조건
   1. Discord 로그인
-  2. 로그인 계정이 `TECHNICAL_LEAD_USER_IDS`에 포함
+  2. 로그인 계정이 해당 길드의 `Technical Lead` 역할 보유
   3. `MASTER_DASHBOARD_TOKEN` 일치
 
 ## 7. Discord 명령
@@ -110,7 +112,8 @@ node index.js
 
 ## 8. 문제 해결
 - Master 탭이 안 열림
-  - 로그인 계정이 `TECHNICAL_LEAD_USER_IDS`에 있는지 확인
+  - 로그인 계정에 `Technical Lead` 역할이 있는지 확인
+  - `TECHNICAL_LEAD_ROLE_ID` 또는 `TECHNICAL_LEAD_ROLE_NAME` 설정 확인
   - `MASTER_DASHBOARD_TOKEN` 확인
 - OAuth 로그인 버튼이 안 보임
   - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI` 확인
