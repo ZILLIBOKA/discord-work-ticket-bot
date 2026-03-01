@@ -34,7 +34,11 @@ function setLastSync() {
 }
 
 function authHeaders() {
-  return { 'x-dashboard-token': state.token, 'content-type': 'application/json' };
+  const headers = { 'content-type': 'application/json' };
+  if (state.token) {
+    headers['x-dashboard-token'] = state.token;
+  }
+  return headers;
 }
 
 function masterAuthHeaders() {
@@ -133,6 +137,7 @@ function renderAuthStatus() {
     $('masterLeadMatchInfo').textContent = `Technical Lead 매칭 길드: ${leadGuildText}`;
   }
   updateTabPermissions();
+  applyDashboardVisibility();
   applyAuthUserToInputs();
 }
 
@@ -151,6 +156,32 @@ function updateTabPermissions() {
   if (state.activeTab === 'ops' && !canOps) {
     switchTab('overview');
   }
+}
+
+function isOauthLoginRequired() {
+  return state.oauthEnabled;
+}
+
+function hasDashboardAccess() {
+  if (isOauthLoginRequired()) {
+    return !!(state.authUser && state.authUser.id);
+  }
+  return !!state.token;
+}
+
+function applyDashboardVisibility() {
+  const authed = hasDashboardAccess();
+  const showTokenUi = !isOauthLoginRequired();
+
+  $('tabsRow').style.display = authed ? '' : 'none';
+  $('tokenRow').style.display = authed ? '' : 'none';
+  $('syncRow').style.display = authed ? '' : 'none';
+  $('tokenHelp').style.display = showTokenUi ? '' : 'none';
+  $('token').style.display = showTokenUi ? '' : 'none';
+  $('saveToken').style.display = showTokenUi ? '' : 'none';
+  $('overviewSection').style.display = authed && state.activeTab === 'overview' ? '' : 'none';
+  $('opsSection').style.display = authed && state.activeTab === 'ops' ? '' : 'none';
+  $('masterSection').style.display = authed && state.activeTab === 'master' ? '' : 'none';
 }
 
 async function loadAuthUser() {
@@ -249,6 +280,17 @@ function ticketStatusChip(t) {
 }
 
 function switchTab(tab) {
+  if (!hasDashboardAccess()) {
+    state.activeTab = 'overview';
+    $('overviewTabBtn').classList.add('active');
+    $('opsTabBtn').classList.remove('active');
+    $('masterTabBtn').classList.remove('active');
+    $('overviewSection').style.display = 'none';
+    $('opsSection').style.display = 'none';
+    $('masterSection').style.display = 'none';
+    applyDashboardVisibility();
+    return;
+  }
   state.activeTab = tab;
   $('overviewSection').style.display = tab === 'overview' ? '' : 'none';
   $('opsSection').style.display = tab === 'ops' ? '' : 'none';
@@ -256,6 +298,7 @@ function switchTab(tab) {
   $('overviewTabBtn').classList.toggle('active', tab === 'overview');
   $('opsTabBtn').classList.toggle('active', tab === 'ops');
   $('masterTabBtn').classList.toggle('active', tab === 'master');
+  applyDashboardVisibility();
 }
 
 function getFilteredClosedTickets(list) {
@@ -359,6 +402,11 @@ async function loadGuilds() {
 }
 
 async function loadData() {
+  if (!hasDashboardAccess()) {
+    state.operationsManager = false;
+    applyDashboardVisibility();
+    return;
+  }
   state.guildId = $('guild').value;
   if (!state.guildId) throw new Error('길드를 먼저 선택하세요.');
 
@@ -501,6 +549,10 @@ function parseTicketNoList(raw) {
 
 $('saveToken').addEventListener('click', async () => {
   try {
+    if (isOauthLoginRequired()) {
+      setStatus('OAuth 모드에서는 토큰 저장이 필요하지 않습니다.');
+      return;
+    }
     state.token = $('token').value.trim();
     if (!state.token) throw new Error('토큰을 입력하세요.');
     localStorage.setItem('dashboardToken', state.token);
@@ -526,6 +578,9 @@ $('saveMasterToken').addEventListener('click', async () => {
 
 $('load').addEventListener('click', async () => {
   try {
+    if (!hasDashboardAccess()) {
+      throw new Error('먼저 Discord 로그인 후 사용하세요.');
+    }
     await loadData();
   } catch (error) {
     setStatus(`불러오기 실패: ${error.message}`, 'error');
@@ -542,6 +597,9 @@ $('loadMaster').addEventListener('click', async () => {
 
 $('guild').addEventListener('change', async () => {
   try {
+    if (!hasDashboardAccess()) {
+      throw new Error('먼저 Discord 로그인 후 사용하세요.');
+    }
     await loadData();
   } catch (error) {
     setStatus(`길드 변경 실패: ${error.message}`, 'error');
@@ -566,6 +624,10 @@ $('liveInterval').addEventListener('change', restartAutoRefresh);
 
 $('overviewTabBtn').addEventListener('click', () => switchTab('overview'));
 $('masterTabBtn').addEventListener('click', () => {
+  if (!hasDashboardAccess()) {
+    setStatus('먼저 Discord 로그인 후 접근하세요.', 'error');
+    return;
+  }
   if (!state.technicalLead) {
     setStatus('Master 탭은 Technical Lead만 접근할 수 있습니다.', 'error');
     return;
@@ -573,6 +635,10 @@ $('masterTabBtn').addEventListener('click', () => {
   switchTab('master');
 });
 $('opsTabBtn').addEventListener('click', () => {
+  if (!hasDashboardAccess()) {
+    setStatus('먼저 Discord 로그인 후 접근하세요.', 'error');
+    return;
+  }
   if (!state.operationsManager) {
     setStatus('Operations 탭은 Operations 권한 사용자만 접근할 수 있습니다.', 'error');
     return;
@@ -784,8 +850,21 @@ $('masterGuildTable').addEventListener('click', async (ev) => {
   switchTab('overview');
   await loadAuthConfig();
   await loadAuthUser();
+  applyDashboardVisibility();
 
-  if (!state.token) {
+  if (isOauthLoginRequired()) {
+    if (!hasDashboardAccess()) {
+      setStatus('Discord 로그인 후 대시보드가 표시됩니다.');
+    } else {
+      try {
+        await loadGuilds();
+        await loadData();
+        restartAutoRefresh();
+      } catch (error) {
+        setStatus(`초기 로드 실패: ${error.message}`, 'error');
+      }
+    }
+  } else if (!state.token) {
     setStatus('토큰을 입력해 연결하세요.');
   } else {
     try {

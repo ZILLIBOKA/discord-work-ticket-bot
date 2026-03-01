@@ -718,6 +718,17 @@ function requireDashboardToken(req, res, next) {
   next();
 }
 
+function requireDashboardAccess(req, res, next) {
+  if (DISCORD_OAUTH_ENABLED) {
+    const authUser = getDashboardAuthUser(req);
+    if (!authUser || !authUser.id) {
+      return res.status(401).json({ error: 'Discord login required' });
+    }
+    return next();
+  }
+  return requireDashboardToken(req, res, next);
+}
+
 function parseCookies(req) {
   const header = String(req.headers.cookie || '');
   if (!header) {
@@ -1135,13 +1146,13 @@ function startDashboardServer() {
     res.json({ ok: true, bot: client.user ? client.user.tag : 'starting' });
   });
 
-  app.get('/api/guilds', requireDashboardToken, async (_req, res) => {
+  app.get('/api/guilds', requireDashboardAccess, async (_req, res) => {
     const guilds = client.guilds.cache.map((g) => ({ id: g.id, name: g.name }));
     guilds.sort((a, b) => a.name.localeCompare(b.name));
     res.json({ guilds });
   });
 
-  app.get('/api/guilds/:guildId/data', requireDashboardToken, async (req, res) => {
+  app.get('/api/guilds/:guildId/data', requireDashboardAccess, async (req, res) => {
     const guild = client.guilds.cache.get(req.params.guildId);
     if (!guild) {
       return res.status(404).json({ error: 'Guild not found' });
@@ -1502,15 +1513,15 @@ function startDashboardServer() {
     return res.json({ ok: true, operatorRoleIds: guildState.dashboard.operatorRoleIds });
   });
 
-  app.post('/api/guilds/:guildId/manager-users', requireDashboardToken, async (req, res) => {
+  app.post('/api/guilds/:guildId/manager-users', requireDashboardAccess, async (req, res) => {
     return res.status(403).json({ error: 'Permission management is only available in Master tab' });
   });
 
-  app.post('/api/guilds/:guildId/manager-roles', requireDashboardToken, async (req, res) => {
+  app.post('/api/guilds/:guildId/manager-roles', requireDashboardAccess, async (req, res) => {
     return res.status(403).json({ error: 'Permission management is only available in Master tab' });
   });
 
-  app.post('/api/guilds/:guildId/embed', requireDashboardToken, async (req, res) => {
+  app.post('/api/guilds/:guildId/embed', requireDashboardAccess, async (req, res) => {
     const guild = client.guilds.cache.get(req.params.guildId);
     if (!guild) {
       return res.status(404).json({ error: 'Guild not found' });
@@ -1548,7 +1559,7 @@ function startDashboardServer() {
     res.json({ ok: true, messageId: sent.id });
   });
 
-  app.post('/api/guilds/:guildId/tickets/resequence', requireDashboardToken, async (req, res) => {
+  app.post('/api/guilds/:guildId/tickets/resequence', requireDashboardAccess, async (req, res) => {
     const guild = client.guilds.cache.get(req.params.guildId);
     if (!guild) {
       return res.status(404).json({ error: 'Guild not found' });
