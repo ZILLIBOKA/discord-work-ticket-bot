@@ -2,7 +2,6 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   token: localStorage.getItem('dashboardToken') || '',
-  masterToken: localStorage.getItem('masterDashboardToken') || '',
   oauthEnabled: false,
   authUser: null,
   technicalLead: false,
@@ -17,7 +16,6 @@ const state = {
 };
 
 if (state.token) $('token').value = state.token;
-if (state.masterToken) $('masterToken').value = state.masterToken;
 
 $('endpointHint').textContent = `현재 대시보드 엔드포인트: ${window.location.origin}`;
 
@@ -42,7 +40,7 @@ function authHeaders() {
 }
 
 function masterAuthHeaders() {
-  return { 'x-master-token': state.masterToken, 'content-type': 'application/json' };
+  return { 'content-type': 'application/json' };
 }
 
 async function api(path, options = {}) {
@@ -263,6 +261,32 @@ function fillSelect(el, rows, labelKey = 'name', emptyText = '선택 가능한 �
   } else {
     el.value = rows[0].id;
   }
+}
+
+function fillMultiSelect(el, rows, labelKey = 'name', emptyText = '항목 없음', selectedValues = []) {
+  el.innerHTML = '';
+  const selectedSet = new Set((selectedValues || []).map((x) => String(x)));
+  if (!rows || rows.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = emptyText;
+    opt.disabled = true;
+    el.appendChild(opt);
+    return;
+  }
+  for (const row of rows) {
+    const opt = document.createElement('option');
+    opt.value = row.id;
+    opt.textContent = row[labelKey] || row.id;
+    if (selectedSet.has(String(row.id))) {
+      opt.selected = true;
+    }
+    el.appendChild(opt);
+  }
+}
+
+function selectedValues(el) {
+  return Array.from(el.selectedOptions || []).map((opt) => String(opt.value || '')).filter(Boolean);
 }
 
 function renderEmptyRow(tbody, colCount, text) {
@@ -497,8 +521,10 @@ async function loadMasterData() {
 async function loadMasterActors() {
   const guildId = String($('masterOperatorGuild').value || '').trim();
   if (!guildId) {
-    fillSelect($('masterOperatorMemberSelect'), [], 'name', '멤버 없음');
-    fillSelect($('masterOperatorRoleSelect'), [], 'name', '역할 없음');
+    fillMultiSelect($('masterOperatorMemberMulti'), [], 'name', '멤버 없음');
+    fillMultiSelect($('masterOperatorRoleMulti'), [], 'name', '역할 없음');
+    fillMultiSelect($('masterCurrentOperatorUsers'), [], 'name', '없음');
+    fillMultiSelect($('masterCurrentOperatorRoles'), [], 'name', '없음');
     $('masterOperatorSummary').textContent = '운영 권한 정보 없음';
     return;
   }
@@ -509,9 +535,25 @@ async function loadMasterActors() {
     state.masterActorsByGuild[guildId] = actors;
   }
 
-  fillSelect($('masterOperatorMemberSelect'), actors.memberOptions || [], 'name', '멤버 없음');
-  fillSelect($('masterOperatorRoleSelect'), actors.roleOptions || [], 'name', '역할 없음');
-  $('masterOperatorSummary').textContent = `현재 Operations 사용자: ${(actors.currentOperatorUserIds || []).join(', ') || '없음'} | 역할: ${(actors.currentOperatorRoleIds || []).join(', ') || '없음'}`;
+  const memberOptions = actors.memberOptions || [];
+  const roleOptions = actors.roleOptions || [];
+  fillMultiSelect($('masterOperatorMemberMulti'), memberOptions, 'name', '멤버 없음');
+  fillMultiSelect($('masterOperatorRoleMulti'), roleOptions, 'name', '역할 없음');
+
+  const memberMap = new Map(memberOptions.map((m) => [String(m.id), m.name]));
+  const roleMap = new Map(roleOptions.map((r) => [String(r.id), r.name]));
+  const currentUsers = (actors.currentOperatorUserIds || []).map((id) => ({
+    id: String(id),
+    name: memberMap.get(String(id)) || `User ID ${id}`
+  }));
+  const currentRoles = (actors.currentOperatorRoleIds || []).map((id) => ({
+    id: String(id),
+    name: roleMap.get(String(id)) || `Role ID ${id}`
+  }));
+  fillMultiSelect($('masterCurrentOperatorUsers'), currentUsers, 'name', '없음');
+  fillMultiSelect($('masterCurrentOperatorRoles'), currentRoles, 'name', '없음');
+
+  $('masterOperatorSummary').textContent = `현재 Operations 사용자 ${currentUsers.length}명 | 역할 ${currentRoles.length}개`;
 }
 
 async function refreshMasterActors(guildId) {
@@ -541,18 +583,6 @@ $('saveToken').addEventListener('click', async () => {
     restartAutoRefresh();
   } catch (error) {
     setStatus(`토큰 저장 실패: ${error.message}`, 'error');
-  }
-});
-
-$('saveMasterToken').addEventListener('click', async () => {
-  try {
-    state.masterToken = $('masterToken').value.trim();
-    if (!state.masterToken) throw new Error('마스터 토큰을 입력하세요.');
-    localStorage.setItem('masterDashboardToken', state.masterToken);
-    await loadMasterData();
-    setStatus('마스터 토큰 저장 및 검증 완료');
-  } catch (error) {
-    setStatus(`마스터 토큰 실패: ${error.message}`, 'error');
   }
 });
 
@@ -725,66 +755,70 @@ $('masterOperatorGuild').addEventListener('change', async () => {
   }
 });
 
-$('masterAddOperatorUser').addEventListener('click', async () => {
+$('masterAddOperatorUsers').addEventListener('click', async () => {
   try {
     const guildId = String($('masterOperatorGuild').value || '').trim();
-    const manualId = String($('masterOperatorUserIdManual').value || '').trim();
-    const selectedId = String($('masterOperatorMemberSelect').value || '').trim();
-    const userId = manualId || selectedId;
-    if (!guildId || !userId) throw new Error('길드와 사용자 ID를 선택/입력하세요.');
-    await apiMaster(`/api/master/guilds/${guildId}/operators-users`, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'add', userId })
-    });
-    $('masterOperatorUserIdManual').value = '';
+    const userIds = selectedValues($('masterOperatorMemberMulti'));
+    if (!guildId || userIds.length === 0) throw new Error('길드와 사용자를 선택하세요.');
+    await Promise.all(userIds.map((userId) =>
+      apiMaster(`/api/master/guilds/${guildId}/operators-users`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'add', userId })
+      })
+    ));
     await refreshMasterActors(guildId);
   } catch (error) {
     setStatus(`Operations 사용자 추가 실패: ${error.message}`, 'error');
   }
 });
 
-$('masterRemoveOperatorUser').addEventListener('click', async () => {
+$('masterRemoveOperatorUsers').addEventListener('click', async () => {
   try {
     const guildId = String($('masterOperatorGuild').value || '').trim();
-    const manualId = String($('masterOperatorUserIdManual').value || '').trim();
-    const selectedId = String($('masterOperatorMemberSelect').value || '').trim();
-    const userId = manualId || selectedId;
-    if (!guildId || !userId) throw new Error('길드와 사용자 ID를 선택/입력하세요.');
-    await apiMaster(`/api/master/guilds/${guildId}/operators-users`, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'remove', userId })
-    });
-    $('masterOperatorUserIdManual').value = '';
+    const userIds = selectedValues($('masterOperatorMemberMulti')).concat(selectedValues($('masterCurrentOperatorUsers')));
+    const uniq = Array.from(new Set(userIds.filter(Boolean)));
+    if (!guildId || uniq.length === 0) throw new Error('길드와 제거할 사용자를 선택하세요.');
+    await Promise.all(uniq.map((userId) =>
+      apiMaster(`/api/master/guilds/${guildId}/operators-users`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'remove', userId })
+      })
+    ));
     await refreshMasterActors(guildId);
   } catch (error) {
     setStatus(`Operations 사용자 제거 실패: ${error.message}`, 'error');
   }
 });
 
-$('masterAddOperatorRole').addEventListener('click', async () => {
+$('masterAddOperatorRoles').addEventListener('click', async () => {
   try {
     const guildId = String($('masterOperatorGuild').value || '').trim();
-    const roleId = String($('masterOperatorRoleSelect').value || '').trim();
-    if (!guildId || !roleId) throw new Error('길드와 역할을 선택하세요.');
-    await apiMaster(`/api/master/guilds/${guildId}/operators-roles`, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'add', roleId })
-    });
+    const roleIds = selectedValues($('masterOperatorRoleMulti'));
+    if (!guildId || roleIds.length === 0) throw new Error('길드와 역할을 선택하세요.');
+    await Promise.all(roleIds.map((roleId) =>
+      apiMaster(`/api/master/guilds/${guildId}/operators-roles`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'add', roleId })
+      })
+    ));
     await refreshMasterActors(guildId);
   } catch (error) {
     setStatus(`Operations 역할 추가 실패: ${error.message}`, 'error');
   }
 });
 
-$('masterRemoveOperatorRole').addEventListener('click', async () => {
+$('masterRemoveOperatorRoles').addEventListener('click', async () => {
   try {
     const guildId = String($('masterOperatorGuild').value || '').trim();
-    const roleId = String($('masterOperatorRoleSelect').value || '').trim();
-    if (!guildId || !roleId) throw new Error('길드와 역할을 선택하세요.');
-    await apiMaster(`/api/master/guilds/${guildId}/operators-roles`, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'remove', roleId })
-    });
+    const roleIds = selectedValues($('masterOperatorRoleMulti')).concat(selectedValues($('masterCurrentOperatorRoles')));
+    const uniq = Array.from(new Set(roleIds.filter(Boolean)));
+    if (!guildId || uniq.length === 0) throw new Error('길드와 제거할 역할을 선택하세요.');
+    await Promise.all(uniq.map((roleId) =>
+      apiMaster(`/api/master/guilds/${guildId}/operators-roles`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'remove', roleId })
+      })
+    ));
     await refreshMasterActors(guildId);
   } catch (error) {
     setStatus(`Operations 역할 제거 실패: ${error.message}`, 'error');
@@ -821,11 +855,7 @@ $('masterRemoveOperatorRole').addEventListener('click', async () => {
     }
   }
 
-  if (state.masterToken) {
-    try {
-      await loadMasterData();
-    } catch (_error) {
-      // handled by manual load
-    }
+  if (state.technicalLead) {
+    await loadMasterData().catch(() => {});
   }
 })();

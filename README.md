@@ -35,7 +35,6 @@
 ```env
 DISCORD_TOKEN=...
 DASHBOARD_TOKEN=...
-MASTER_DASHBOARD_TOKEN=...
 
 # Discord OAuth2
 DISCORD_CLIENT_ID=...
@@ -55,7 +54,6 @@ ENABLE_MESSAGE_CONTENT_INTENT=false
 ### 변수 설명
 - `DISCORD_TOKEN`: 봇 로그인 토큰
 - `DASHBOARD_TOKEN`: 일반 Dashboard API 토큰
-- `MASTER_DASHBOARD_TOKEN`: Master API 토큰(추가 보호)
 - `DISCORD_CLIENT_ID/SECRET/REDIRECT_URI`: OAuth 로그인용
 - `TECHNICAL_LEAD_ROLE_ID`: Master 탭 접근 허용 역할 ID(권장)
 - `TECHNICAL_LEAD_ROLE_NAME`: Master 탭 접근 허용 역할명(기본: `Technical Lead`)
@@ -75,7 +73,7 @@ node index.js
 3. `DISCORD_REDIRECT_URI`가 실제 Koyeb 도메인과 정확히 일치하는지 확인
 4. Deploy
 5. Dashboard 접속 후
-- `DASHBOARD_TOKEN` 저장
+- `DASHBOARD_TOKEN` 저장(비 OAuth 백업 모드에서만 사용)
 - `Discord Login` 수행
 - (로그인 계정이 해당 길드에서 Technical Lead 역할이면) `Master` 탭 접근 가능
 
@@ -100,7 +98,6 @@ node index.js
 - Master 접근 조건
   1. Discord 로그인
   2. 로그인 계정이 해당 길드의 `Technical Lead` 역할 보유
-  3. `MASTER_DASHBOARD_TOKEN` 일치
 
 ## 7. Discord 명령
 - `/open`
@@ -114,7 +111,6 @@ node index.js
 - Master 탭이 안 열림
   - 로그인 계정에 `Technical Lead` 역할이 있는지 확인
   - `TECHNICAL_LEAD_ROLE_ID` 또는 `TECHNICAL_LEAD_ROLE_NAME` 설정 확인
-  - `MASTER_DASHBOARD_TOKEN` 확인
 - OAuth 로그인 버튼이 안 보임
   - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI` 확인
 - OAuth 콜백 실패

@@ -654,24 +654,28 @@
       <h2 class="title" style="font-size:18px; margin-bottom:10px;">Master Console</h2>
       <p class="fine" style="margin-bottom:10px;">Operations 권한(사용자/역할)만 관리합니다.</p>
       <div class="row">
-        <input id="masterToken" class="field" placeholder="MASTER_DASHBOARD_TOKEN" autocomplete="off" />
-        <button id="saveMasterToken" class="btn btn-primary">마스터 토큰 저장</button>
         <button id="loadMaster" class="btn btn-soft">마스터 데이터 불러오기</button>
       </div>
       <p class="label" style="margin-top:12px;">Operations Permission</p>
       <div class="row">
         <select id="masterOperatorGuild" class="select"></select>
-        <select id="masterOperatorMemberSelect" class="select"></select>
-        <select id="masterOperatorRoleSelect" class="select"></select>
       </div>
       <div class="row" style="margin-top:8px;">
-        <input id="masterOperatorUserIdManual" class="field" placeholder="Or enter Discord User ID manually" />
-        <button id="masterAddOperatorUser" class="btn btn-primary">사용자 권한 추가</button>
-        <button id="masterRemoveOperatorUser" class="btn btn-danger">사용자 권한 제거</button>
+        <select id="masterOperatorMemberMulti" class="select" multiple size="10"></select>
+        <select id="masterOperatorRoleMulti" class="select" multiple size="10"></select>
       </div>
       <div class="row" style="margin-top:8px;">
-        <button id="masterAddOperatorRole" class="btn btn-primary">역할 권한 추가</button>
-        <button id="masterRemoveOperatorRole" class="btn btn-danger">역할 권한 제거</button>
+        <button id="masterAddOperatorUsers" class="btn btn-primary">선택 사용자 권한 추가</button>
+        <button id="masterRemoveOperatorUsers" class="btn btn-danger">선택 사용자 권한 제거</button>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button id="masterAddOperatorRoles" class="btn btn-primary">선택 역할 권한 추가</button>
+        <button id="masterRemoveOperatorRoles" class="btn btn-danger">선택 역할 권한 제거</button>
+      </div>
+      <p class="label" style="margin-top:10px;">Current Operations Permission</p>
+      <div class="row">
+        <select id="masterCurrentOperatorUsers" class="select" multiple size="8"></select>
+        <select id="masterCurrentOperatorRoles" class="select" multiple size="8"></select>
       </div>
       <p id="masterOperatorSummary" class="fine" style="margin-top:8px;">운영 권한 정보 없음</p>
       <p id="masterLeadMatchInfo" class="fine" style="margin-top:6px;">Technical Lead 매칭 길드 정보 없음</p>

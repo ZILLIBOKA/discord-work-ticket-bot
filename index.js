@@ -40,7 +40,6 @@ const GOOGLE_SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '
 const GOOGLE_SERVICE_ACCOUNT_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_FILE || '';
 const DASHBOARD_PORT = Number(process.env.DASHBOARD_PORT || 8787);
 const DASHBOARD_TOKEN = String(process.env.DASHBOARD_TOKEN || '').trim();
-const MASTER_DASHBOARD_TOKEN = String(process.env.MASTER_DASHBOARD_TOKEN || '').trim();
 const DISCORD_CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || '').trim();
 const DISCORD_CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
 const DISCORD_REDIRECT_URI = String(process.env.DISCORD_REDIRECT_URI || '').trim();
@@ -854,17 +853,8 @@ async function getTechnicalLeadGuildMatches(userId) {
 }
 
 async function requireMasterDashboardToken(req, res, next) {
-  if (!MASTER_DASHBOARD_TOKEN) {
-    return res.status(503).json({ error: 'Master dashboard token is not configured' });
-  }
   if (!DISCORD_OAUTH_ENABLED) {
     return res.status(503).json({ error: 'Discord OAuth is required for Master access' });
-  }
-  const fromHeader = String(req.headers['x-master-token'] || '').trim();
-  const fromQuery = String(req.query.masterToken || '').trim();
-  const token = fromHeader || fromQuery;
-  if (token !== MASTER_DASHBOARD_TOKEN) {
-    return res.status(401).json({ error: 'Unauthorized' });
   }
   const authUser = getDashboardAuthUser(req);
   if (!authUser || !authUser.id) {
@@ -2747,9 +2737,6 @@ process.on('uncaughtException', (error) => {
 
 if (!DASHBOARD_TOKEN) {
   console.warn('[dashboard] DASHBOARD_TOKEN is empty. API will reject requests until set.');
-}
-if (!MASTER_DASHBOARD_TOKEN) {
-  console.warn('[dashboard] MASTER_DASHBOARD_TOKEN is empty. Master API will be disabled.');
 }
 if (!DISCORD_OAUTH_ENABLED) {
   console.warn('[dashboard] Discord OAuth is disabled. Set DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_URI.');
