@@ -470,6 +470,13 @@
       #opsHistoryTable tbody td:nth-child(5)::before { content: 'Details'; }
       #opsHistoryTable tbody td:nth-child(6)::before { content: 'Reason'; }
 
+      #masterIssuerStatsTable tbody td:nth-child(1)::before { content: 'User'; }
+      #masterIssuerStatsTable tbody td:nth-child(2)::before { content: 'Job'; }
+      #masterIssuerStatsTable tbody td:nth-child(3)::before { content: 'Material'; }
+      #masterIssuerStatsTable tbody td:nth-child(4)::before { content: 'Defected'; }
+      #masterIssuerStatsTable tbody td:nth-child(5)::before { content: 'General'; }
+      #masterIssuerStatsTable tbody td:nth-child(6)::before { content: 'Total'; }
+
       .muted-cell {
         padding: 14px 10px !important;
         padding-left: 10px !important;
@@ -713,6 +720,22 @@
       </div>
       <p id="masterOperatorSummary" class="fine" style="margin-top:8px;">운영 권한 정보 없음</p>
       <p id="masterLeadMatchInfo" class="fine" style="margin-top:6px;">Technical Lead 매칭 길드 정보 없음</p>
+      <p class="label" style="margin-top:12px;">Ticket Issuer Stats</p>
+      <div class="table-wrap">
+        <table id="masterIssuerStatsTable">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Job</th>
+              <th>Material Use</th>
+              <th>Defected Material</th>
+              <th>General</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <p id="masterSummary" class="fine" style="margin-top:10px;">마스터 데이터 미로딩</p>
     </section>
   </main>

@@ -1450,12 +1450,57 @@ function startDashboardServer() {
       .map(({ id, name }) => ({ id, name }))
       .slice(0, 1000);
 
+    const allTickets = [
+      ...Object.values(guildState.ticketChannels || {}),
+      ...(guildState.tickets.history || [])
+    ];
+    const typeKeys = ['job', 'material_use', 'defected_material', 'general'];
+    const issuerMap = new Map();
+    for (const ticket of allTickets) {
+      const ownerId = String(ticket && ticket.ownerId ? ticket.ownerId : '').trim();
+      if (!ownerId) {
+        continue;
+      }
+      const typeKey = sanitizeTicketType(ticket.ticketType);
+      let row = issuerMap.get(ownerId);
+      if (!row) {
+        const member = guild.members.cache.get(ownerId);
+        const displayName = member
+          ? (member.displayName || (member.user && member.user.username) || ownerId)
+          : ownerId;
+        row = {
+          ownerId,
+          ownerName: displayName,
+          job: 0,
+          material_use: 0,
+          defected_material: 0,
+          general: 0,
+          total: 0
+        };
+        issuerMap.set(ownerId, row);
+      }
+      if (typeKeys.includes(typeKey)) {
+        row[typeKey] += 1;
+      } else {
+        row.general += 1;
+      }
+      row.total += 1;
+    }
+    const issuerStats = Array.from(issuerMap.values())
+      .sort((a, b) => {
+        if ((b.total || 0) !== (a.total || 0)) {
+          return (b.total || 0) - (a.total || 0);
+        }
+        return String(a.ownerName || '').localeCompare(String(b.ownerName || ''));
+      });
+
     return res.json({
       guild: { id: guild.id, name: guild.name },
       memberOptions,
       roleOptions,
       currentOperatorUserIds: guildState.dashboard.operatorUserIds || [],
-      currentOperatorRoleIds: guildState.dashboard.operatorRoleIds || []
+      currentOperatorRoleIds: guildState.dashboard.operatorRoleIds || [],
+      issuerStats
     });
   });
 

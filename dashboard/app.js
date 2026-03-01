@@ -289,6 +289,21 @@ function selectedValues(el) {
   return Array.from(el.selectedOptions || []).map((opt) => String(opt.value || '')).filter(Boolean);
 }
 
+function renderMasterIssuerStats(stats) {
+  const tbody = $('masterIssuerStatsTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  const rows = Array.isArray(stats) ? stats : [];
+  if (rows.length === 0) {
+    renderEmptyRow(tbody, 6, '티켓 발행 통계가 없습니다.');
+    return;
+  }
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(row.ownerName || row.ownerId || '-')}<br><span class="fine">${escapeHtml(row.ownerId || '')}</span></td><td>${row.job || 0}</td><td>${row.material_use || 0}</td><td>${row.defected_material || 0}</td><td>${row.general || 0}</td><td><strong>${row.total || 0}</strong></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
 function renderEmptyRow(tbody, colCount, text) {
   const tr = document.createElement('tr');
   tr.innerHTML = `<td colspan="${colCount}" class="muted-cell">${text}</td>`;
@@ -525,6 +540,7 @@ async function loadMasterActors() {
     fillMultiSelect($('masterOperatorRoleMulti'), [], 'name', '역할 없음');
     fillMultiSelect($('masterCurrentOperatorUsers'), [], 'name', '없음');
     fillMultiSelect($('masterCurrentOperatorRoles'), [], 'name', '없음');
+    renderMasterIssuerStats([]);
     $('masterOperatorSummary').textContent = '운영 권한 정보 없음';
     return;
   }
@@ -552,6 +568,7 @@ async function loadMasterActors() {
   }));
   fillMultiSelect($('masterCurrentOperatorUsers'), currentUsers, 'name', '없음');
   fillMultiSelect($('masterCurrentOperatorRoles'), currentRoles, 'name', '없음');
+  renderMasterIssuerStats(actors.issuerStats || []);
 
   $('masterOperatorSummary').textContent = `현재 Operations 사용자 ${currentUsers.length}명 | 역할 ${currentRoles.length}개`;
 }
