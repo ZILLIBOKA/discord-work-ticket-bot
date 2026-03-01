@@ -171,7 +171,12 @@ async function loadData() {
   const available = data.channelStats && Number.isInteger(data.channelStats.availableTextChannels)
     ? data.channelStats.availableTextChannels
     : (data.textChannels || []).length;
-  setStatus(`길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 공지 채널 ${available}개`);
+  const memberCount = (data.memberOptions || []).length;
+  let status = `길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 공지 채널 ${available}개 · 멤버 ${memberCount}명`;
+  if (memberCount === 0) {
+    status += ' (멤버 인텐트/권한 제한 가능)';
+  }
+  setStatus(status);
 }
 
 function restartAutoRefresh() {
@@ -198,7 +203,9 @@ function restartAutoRefresh() {
 }
 
 async function updateManager(kind, action) {
-  const id = kind === 'users' ? $('memberSelect').value : $('roleSelect').value;
+  const selectedId = kind === 'users' ? $('memberSelect').value : $('roleSelect').value;
+  const manualUserId = kind === 'users' ? String($('memberManualId').value || '').trim() : '';
+  const id = kind === 'users' ? (manualUserId || selectedId) : selectedId;
   if (!id) {
     setStatus('선택 가능한 항목이 없어 작업을 건너뜁니다.', 'error');
     return;
@@ -211,6 +218,9 @@ async function updateManager(kind, action) {
   });
 
   await loadData();
+  if (kind === 'users' && manualUserId) {
+    $('memberManualId').value = '';
+  }
 }
 
 $('saveToken').addEventListener('click', async () => {
