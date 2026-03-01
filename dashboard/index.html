@@ -316,6 +316,11 @@
     }
 
     @media (max-width: 640px) {
+      .topbar {
+        padding: 12px;
+        flex-direction: column;
+        align-items: flex-start;
+      }
       .container { padding: 0 10px 18px; margin-top: 12px; }
       .panel { padding: 12px; border-radius: 14px; }
       .brand { font-size: 17px; }
@@ -323,6 +328,80 @@
       .row > * { flex-basis: 100%; }
       .metrics { grid-template-columns: 1fr; }
       .filters { grid-template-columns: 1fr; }
+      .status {
+        max-width: 100%;
+        width: 100%;
+        white-space: normal;
+      }
+      .chip {
+        white-space: normal;
+        line-height: 1.35;
+      }
+      #liveInterval {
+        max-width: none !important;
+      }
+
+      .table-wrap {
+        overflow: visible;
+        border: none;
+      }
+      table {
+        min-width: 0;
+      }
+      thead {
+        display: none;
+      }
+      tbody tr {
+        display: block;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        margin-bottom: 10px;
+        padding: 4px 0;
+      }
+      tbody td {
+        display: block;
+        border-bottom: 1px solid #eef3fa;
+        padding: 8px 10px 8px 42%;
+        position: relative;
+        min-height: 34px;
+        word-break: break-word;
+      }
+      tbody td:last-child {
+        border-bottom: none;
+      }
+      tbody td::before {
+        position: absolute;
+        left: 10px;
+        top: 8px;
+        width: 36%;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.25px;
+        content: '';
+      }
+      #openTable tbody td:nth-child(1)::before { content: 'No'; }
+      #openTable tbody td:nth-child(2)::before { content: 'Type'; }
+      #openTable tbody td:nth-child(3)::before { content: 'Status'; }
+      #openTable tbody td:nth-child(4)::before { content: 'Owner'; }
+      #openTable tbody td:nth-child(5)::before { content: 'Channel'; }
+      #openTable tbody td:nth-child(6)::before { content: 'Details'; }
+      #openTable tbody td:nth-child(7)::before { content: 'Created'; }
+
+      #closedTable tbody td:nth-child(1)::before { content: 'No'; }
+      #closedTable tbody td:nth-child(2)::before { content: 'Type'; }
+      #closedTable tbody td:nth-child(3)::before { content: 'Owner'; }
+      #closedTable tbody td:nth-child(4)::before { content: 'Closed'; }
+      #closedTable tbody td:nth-child(5)::before { content: 'Details'; }
+      #closedTable tbody td:nth-child(6)::before { content: 'Reason'; }
+
+      .muted-cell {
+        padding: 14px 10px !important;
+        padding-left: 10px !important;
+        text-align: center;
+      }
     }
   </style>
 </head>
