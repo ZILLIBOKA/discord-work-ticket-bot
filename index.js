@@ -55,33 +55,33 @@ const TICKET_SCHEMAS = {
   job: {
     label: 'Job Ticket',
     fields: [
-      { id: 'date', label: 'Date', placeholder: 'YYYY-MM-DD', style: 'short', required: true },
-      { id: 'ts', label: 'TS', placeholder: '예: TS-1234', style: 'short', required: true },
-      { id: 'location', label: 'Location', placeholder: '현장 위치', style: 'short', required: true },
-      { id: 'fault', label: 'Fault', placeholder: '장애 내용', style: 'paragraph', required: true }
+      { id: 'date', label: 'Date', placeholder: 'Example: 2026-03-01', style: 'short', required: true },
+      { id: 'ts', label: 'TS (Trainset)', placeholder: 'Example: TS-1234 (Trainset ID)', style: 'short', required: true },
+      { id: 'location', label: 'Location', placeholder: 'Example: Depot A, Track 4', style: 'short', required: true },
+      { id: 'fault', label: 'Fault', placeholder: 'Example: Door control fault on Car 3', style: 'paragraph', required: true }
     ]
   },
   material_use: {
     label: 'Material Use Ticket',
     fields: [
-      { id: 'date', label: 'Date', placeholder: 'YYYY-MM-DD', style: 'short', required: true },
-      { id: 'job_no', label: 'Job No', placeholder: '작업 번호', style: 'short', required: true },
-      { id: 'material_sn', label: 'Material with S/N', placeholder: '자재명 + 시리얼번호', style: 'paragraph', required: true }
+      { id: 'date', label: 'Date', placeholder: 'Example: 2026-03-01', style: 'short', required: true },
+      { id: 'job_no', label: 'Job No', placeholder: 'Example: JOB-240301-01', style: 'short', required: true },
+      { id: 'material_sn', label: 'Material with S/N', placeholder: 'Example: Brake Relay / SN: BR-99341', style: 'paragraph', required: true }
     ]
   },
   defected_material: {
     label: 'Defected Material Ticket',
     fields: [
-      { id: 'date', label: 'Date', placeholder: 'YYYY-MM-DD', style: 'short', required: true },
-      { id: 'job_no', label: 'Job No', placeholder: '작업 번호', style: 'short', required: true },
-      { id: 'material_sn', label: 'Material with S/N', placeholder: '불량 자재명 + 시리얼번호', style: 'paragraph', required: true }
+      { id: 'date', label: 'Date', placeholder: 'Example: 2026-03-01', style: 'short', required: true },
+      { id: 'job_no', label: 'Job No', placeholder: 'Example: JOB-240301-01', style: 'short', required: true },
+      { id: 'material_sn', label: 'Defected Material with S/N', placeholder: 'Example: Fuse Module / SN: FM-88412 (burnt)', style: 'paragraph', required: true }
     ]
   },
   general: {
     label: 'General Ticket',
     fields: [
-      { id: 'date', label: 'Date', placeholder: 'YYYY-MM-DD', style: 'short', required: true },
-      { id: 'inquiry', label: '문의 내용', placeholder: '문의 내용을 입력하세요', style: 'paragraph', required: true }
+      { id: 'date', label: 'Date', placeholder: 'Example: 2026-03-01', style: 'short', required: true },
+      { id: 'inquiry', label: 'Inquiry Details', placeholder: 'Example: Please confirm the maintenance schedule for TS-1234.', style: 'paragraph', required: true }
     ]
   }
 };
