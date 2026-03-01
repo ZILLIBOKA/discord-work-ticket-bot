@@ -635,27 +635,6 @@
     <section id="opsSection" class="grid" style="display:none;">
       <div class="stack">
         <section class="panel">
-          <h2 class="title" style="font-size:18px; margin-bottom:10px;">임베드 공지 전송</h2>
-          <p class="label">발신자 확인 (Operations Manager ID)</p>
-          <input id="embedRequesterUserId" class="field" placeholder="Your Discord User ID" />
-          <p class="label">채널</p>
-          <select id="embedChannel" class="select"></select>
-          <input id="embedChannelManual" class="field" style="margin-top:8px;" placeholder="If channel list is empty, paste Channel ID here (optional)" />
-
-          <div class="row" style="margin-top:10px;">
-            <input id="embedTitle" class="field" placeholder="제목" />
-            <input id="embedColor" class="field" value="#2b8cff" />
-          </div>
-
-          <p class="label" style="margin-top:10px;">내용</p>
-          <textarea id="embedDesc" class="textarea" placeholder="공지 내용을 입력하세요"></textarea>
-          <div class="row" style="margin-top:10px;">
-            <button id="sendEmbed" class="btn btn-primary">임베드 전송</button>
-          </div>
-          <p id="embedResult" class="result"></p>
-        </section>
-
-        <section class="panel">
           <h2 class="title" style="font-size:18px; margin-bottom:10px;">Ticket Number Maintenance</h2>
           <p class="fine">잘못 생성된 티켓 번호를 제거하고 전체 번호를 생성일 기준으로 다시 순차 정렬합니다.</p>
           <input id="resequenceRequesterUserId" class="field" placeholder="Your Discord User ID (Operations Manager)" />
@@ -692,6 +671,27 @@
     <section id="masterSection" class="panel" style="display:none;">
       <h2 class="title" style="font-size:18px; margin-bottom:10px;">Master Console</h2>
       <p class="fine" style="margin-bottom:10px;">Operations 권한(사용자/역할)만 관리합니다.</p>
+
+      <section class="panel" style="margin-bottom:12px;">
+        <h2 class="title" style="font-size:18px; margin-bottom:10px;">임베드 공지 전송 (Master 전용)</h2>
+        <p class="label">채널</p>
+        <select id="embedChannel" class="select"></select>
+        <input id="embedChannelManual" class="field" style="margin-top:8px;" placeholder="If channel list is empty, paste Channel ID here (optional)" />
+        <input id="embedRequesterUserId" class="field" style="margin-top:8px; display:none;" placeholder="Your Discord User ID" />
+
+        <div class="row" style="margin-top:10px;">
+          <input id="embedTitle" class="field" placeholder="제목" />
+          <input id="embedColor" class="field" value="#2b8cff" />
+        </div>
+
+        <p class="label" style="margin-top:10px;">내용</p>
+        <textarea id="embedDesc" class="textarea" placeholder="공지 내용을 입력하세요"></textarea>
+        <div class="row" style="margin-top:10px;">
+          <button id="sendEmbed" class="btn btn-primary">임베드 전송</button>
+        </div>
+        <p id="embedResult" class="result"></p>
+      </section>
+
       <p class="label" style="margin-top:12px;">Operations Permission</p>
       <div class="row">
         <select id="masterOperatorGuild" class="select"></select>

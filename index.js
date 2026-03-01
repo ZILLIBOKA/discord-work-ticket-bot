@@ -1620,29 +1620,17 @@ function startDashboardServer() {
     return res.status(403).json({ error: 'Permission management is only available in Master tab' });
   });
 
-  app.post('/api/guilds/:guildId/embed', requireDashboardAccess, async (req, res) => {
+  app.post('/api/master/guilds/:guildId/embed', requireMasterDashboardToken, async (req, res) => {
     const guild = client.guilds.cache.get(req.params.guildId);
     if (!guild) {
       return res.status(404).json({ error: 'Guild not found' });
     }
-    const guildState = ensureGuild(guild.id);
-    const authUser = getDashboardAuthUser(req);
-    const requesterUserId = DISCORD_OAUTH_ENABLED
-      ? String(authUser && authUser.id ? authUser.id : '')
-      : String(req.body.requesterUserId || '').trim();
     const channelId = String(req.body.channelId || '').trim();
     const title = String(req.body.title || '').trim();
     const description = String(req.body.description || '').trim();
     const colorRaw = String(req.body.color || '#2b8cff').trim();
-    if (!requesterUserId || !channelId || !title || !description) {
-      return res.status(400).json({ error: 'requesterUserId, channelId, title, description required' });
-    }
-    if (DISCORD_OAUTH_ENABLED && !authUser) {
-      return res.status(401).json({ error: 'Discord login required' });
-    }
-    const requesterMember = await guild.members.fetch(requesterUserId).catch(() => null);
-    if (!requesterMember || !isOperationsManagerMember(requesterMember, guildState)) {
-      return res.status(403).json({ error: 'Only approved operations managers can send embeds' });
+    if (!channelId || !title || !description) {
+      return res.status(400).json({ error: 'channelId, title, description required' });
     }
     const channel = guild.channels.cache.get(channelId);
     if (!channel || !channel.isTextBased()) {
@@ -1656,6 +1644,10 @@ function startDashboardServer() {
       .setTimestamp(new Date());
     const sent = await channel.send({ embeds: [embed] });
     res.json({ ok: true, messageId: sent.id });
+  });
+
+  app.post('/api/guilds/:guildId/embed', requireDashboardAccess, async (_req, res) => {
+    return res.status(403).json({ error: 'Embed announcement is only available in Master tab' });
   });
 
   app.post('/api/guilds/:guildId/tickets/resequence', requireDashboardAccess, async (req, res) => {

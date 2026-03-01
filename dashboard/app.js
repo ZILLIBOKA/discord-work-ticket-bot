@@ -712,21 +712,20 @@ $('historyClear').addEventListener('click', () => {
 $('sendEmbed').addEventListener('click', async () => {
   $('embedResult').textContent = '전송 중...';
   try {
-    const requesterUserId = state.authUser && state.authUser.id
-      ? state.authUser.id
-      : String($('embedRequesterUserId').value || '').trim();
+    const targetGuildId = String($('masterOperatorGuild').value || state.guildId || '').trim();
     const payload = {
-      requesterUserId,
       channelId: $('embedChannel').value || String($('embedChannelManual').value || '').trim(),
       title: $('embedTitle').value.trim(),
       description: $('embedDesc').value.trim(),
       color: $('embedColor').value.trim() || '#2b8cff'
     };
-    if (!payload.requesterUserId || !payload.channelId || !payload.title || !payload.description) {
-      throw new Error('발신자 ID, 채널, 제목, 내용을 모두 입력하세요.');
+    if (!targetGuildId) {
+      throw new Error('길드를 먼저 선택하세요.');
     }
-    localStorage.setItem(guildStorageKey('embedRequesterUserId'), payload.requesterUserId);
-    const result = await api(`/api/guilds/${state.guildId}/embed`, { method: 'POST', body: JSON.stringify(payload) });
+    if (!payload.channelId || !payload.title || !payload.description) {
+      throw new Error('채널, 제목, 내용을 모두 입력하세요.');
+    }
+    const result = await apiMaster(`/api/master/guilds/${targetGuildId}/embed`, { method: 'POST', body: JSON.stringify(payload) });
     $('embedResult').textContent = `전송 완료 (messageId: ${result.messageId})`;
     $('embedResult').style.color = '#128058';
   } catch (error) {
@@ -763,6 +762,12 @@ $('runResequence').addEventListener('click', async () => {
 $('masterOperatorGuild').addEventListener('change', async () => {
   localStorage.setItem('masterOperatorGuildId', $('masterOperatorGuild').value || '');
   try {
+    const selectedGuildId = String($('masterOperatorGuild').value || '').trim();
+    if (selectedGuildId && $('guild').value !== selectedGuildId) {
+      $('guild').value = selectedGuildId;
+      state.guildId = selectedGuildId;
+      await loadData();
+    }
     await loadMasterActors();
   } catch (error) {
     setStatus(`운영 권한 대상 로드 실패: ${error.message}`, 'error');
