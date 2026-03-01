@@ -1131,7 +1131,9 @@ function resequenceTickets(guildState, removeTicketNos) {
       refType: 'open',
       channelId,
       meta,
-      createdAt: Number(meta && meta.createdAt) || 0
+      createdAt: Number(meta && meta.createdAt) || 0,
+      existingNo: Number.parseInt(String(meta && meta.ticketNo ? meta.ticketNo : ''), 10) || 0,
+      order: 0
     });
   }
   for (let i = 0; i < (guildState.tickets.history || []).length; i += 1) {
@@ -1140,10 +1142,20 @@ function resequenceTickets(guildState, removeTicketNos) {
       refType: 'history',
       index: i,
       meta,
-      createdAt: Number(meta && meta.createdAt) || Number(meta && meta.closedAt) || 0
+      createdAt: Number(meta && meta.createdAt) || Number(meta && meta.closedAt) || 0,
+      existingNo: Number.parseInt(String(meta && meta.ticketNo ? meta.ticketNo : ''), 10) || 0,
+      order: i + 1
     });
   }
-  records.sort((a, b) => a.createdAt - b.createdAt);
+  records.sort((a, b) => {
+    if (a.createdAt !== b.createdAt) {
+      return a.createdAt - b.createdAt;
+    }
+    if (a.existingNo !== b.existingNo) {
+      return a.existingNo - b.existingNo;
+    }
+    return a.order - b.order;
+  });
 
   let ticketNo = 1;
   for (const record of records) {
@@ -1155,15 +1167,43 @@ function resequenceTickets(guildState, removeTicketNos) {
 
 function ensureTicketNumbers(guildState) {
   const seen = new Set();
+  const needAssign = [];
   let maxNo = 0;
-  let needResequence = false;
-  const records = Object.values(guildState.ticketChannels || {}).concat(guildState.tickets.history || []);
+  let changed = false;
+  const records = [];
 
-  for (const meta of records) {
-    const ticketNo = Number.parseInt(String(meta && meta.ticketNo ? meta.ticketNo : ''), 10);
+  for (const [channelId, meta] of Object.entries(guildState.ticketChannels || {})) {
+    records.push({
+      kind: 'open',
+      channelId,
+      meta,
+      sortAt: Number(meta && meta.createdAt) || 0,
+      order: 0
+    });
+  }
+  for (let i = 0; i < (guildState.tickets.history || []).length; i += 1) {
+    const meta = guildState.tickets.history[i];
+    records.push({
+      kind: 'history',
+      index: i,
+      meta,
+      sortAt: Number(meta && meta.createdAt) || Number(meta && meta.closedAt) || 0,
+      order: i + 1
+    });
+  }
+
+  records.sort((a, b) => {
+    if (a.sortAt !== b.sortAt) {
+      return a.sortAt - b.sortAt;
+    }
+    return a.order - b.order;
+  });
+
+  for (const record of records) {
+    const ticketNo = Number.parseInt(String(record.meta && record.meta.ticketNo ? record.meta.ticketNo : ''), 10);
     if (!Number.isInteger(ticketNo) || ticketNo <= 0 || seen.has(ticketNo)) {
-      needResequence = true;
-      break;
+      needAssign.push(record.meta);
+      continue;
     }
     seen.add(ticketNo);
     if (ticketNo > maxNo) {
@@ -1171,13 +1211,15 @@ function ensureTicketNumbers(guildState) {
     }
   }
 
-  if (needResequence) {
-    resequenceTickets(guildState, []);
-    return true;
+  let nextNo = Math.max(1, maxNo + 1);
+  for (const meta of needAssign) {
+    meta.ticketNo = nextNo;
+    nextNo += 1;
+    changed = true;
   }
 
-  guildState.tickets.nextTicketNo = Math.max(1, maxNo + 1);
-  return false;
+  guildState.tickets.nextTicketNo = nextNo;
+  return changed;
 }
 
 function startDashboardServer() {
