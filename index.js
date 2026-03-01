@@ -84,6 +84,15 @@ const TICKET_SCHEMAS = {
       { id: 'material_sn', label: 'Defected Material with S/N', placeholder: 'Example: Fuse Module / SN: FM-88412 (burnt)', style: 'paragraph', required: true }
     ]
   },
+  asset_material_request: {
+    label: 'Asset/Material Request Ticket',
+    fields: [
+      { id: 'date', label: 'Date', placeholder: 'Example: 2026-03-01', style: 'short', required: true },
+      { id: 'item', label: 'Requested Asset/Material', placeholder: 'Example: Door Motor Unit', style: 'short', required: true },
+      { id: 'quantity', label: 'Quantity', placeholder: 'Example: 2', style: 'short', required: true },
+      { id: 'details', label: 'Request Details', placeholder: 'Example: Needed for Car 4 preventive replacement', style: 'paragraph', required: true }
+    ]
+  },
   general: {
     label: 'General Ticket',
     fields: [
@@ -912,6 +921,7 @@ async function registerSlashCommands(clientInstance) {
             { name: 'Job Ticket', value: 'job' },
             { name: 'Material Use Ticket', value: 'material_use' },
             { name: 'Defected Material Ticket', value: 'defected_material' },
+            { name: 'Asset/Material Request Ticket', value: 'asset_material_request' },
             { name: 'General Ticket', value: 'general' }
           )),
     new SlashCommandBuilder().setName('claim').setDescription('Claim current ticket channel'),
@@ -920,7 +930,22 @@ async function registerSlashCommands(clientInstance) {
       .setDescription('Close current ticket channel')
       .addStringOption((o) => o.setName('reason').setDescription('Close reason').setRequired(false)),
     new SlashCommandBuilder().setName('ticketstatus').setDescription('Show ticket system status'),
-    new SlashCommandBuilder().setName('ticketpanel').setDescription('Post ticket create panel'),
+    new SlashCommandBuilder()
+      .setName('ticketpanel')
+      .setDescription('Post ticket panel (all types or one fixed type)')
+      .addStringOption((o) =>
+        o
+          .setName('type')
+          .setDescription('Optional: fixed ticket type for this channel panel')
+          .setRequired(false)
+          .addChoices(
+            { name: 'All Types (picker)', value: 'all' },
+            { name: 'Job Ticket', value: 'job' },
+            { name: 'Material Use Ticket', value: 'material_use' },
+            { name: 'Defected Material Ticket', value: 'defected_material' },
+            { name: 'Asset/Material Request Ticket', value: 'asset_material_request' },
+            { name: 'General Ticket', value: 'general' }
+          )),
     new SlashCommandBuilder()
       .setName('manager')
       .setDescription('Manage ticket managers')
@@ -1862,12 +1887,20 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.reply({ content: 'No permission.', ephemeral: true }).catch(() => {});
         return;
       }
+      const selectedType = String(interaction.options.getString('type') || 'all');
+      const fixedType = selectedType === 'all' ? '' : sanitizeTicketType(selectedType);
+      const panelSchema = fixedType ? getTicketSchema(fixedType) : null;
       const openRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ticket_open').setLabel('Create Ticket').setStyle(ButtonStyle.Success)
+        new ButtonBuilder()
+          .setCustomId(fixedType ? `ticket_open_direct:${fixedType}` : 'ticket_open')
+          .setLabel(fixedType ? `Open ${panelSchema.label}` : 'Create Ticket')
+          .setStyle(ButtonStyle.Success)
       );
       const panel = new EmbedBuilder()
-        .setTitle('Ticket Center')
-        .setDescription('Create Ticket 버튼을 누른 뒤 티켓 종류를 선택해서 입력하세요.')
+        .setTitle(fixedType ? panelSchema.label : 'Ticket Center')
+        .setDescription(fixedType
+          ? `Press the button below to open a ${panelSchema.label} form.`
+          : 'Press Create Ticket, select a ticket type, then submit the modal form.')
         .setColor(0x2b8cff)
         .setTimestamp(new Date());
       const sent = await interaction.channel.send({ embeds: [panel], components: [openRow] });
@@ -1958,6 +1991,17 @@ client.on('interactionCreate', async (interaction) => {
       components: [buildTicketTypeSelect()],
       ephemeral: true
     }).catch(() => {});
+    return;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('ticket_open_direct:')) {
+    const ticketType = sanitizeTicketType(interaction.customId.split(':')[1]);
+    if (!canOpenTicket(member, guildState, ticketType)) {
+      await interaction.reply({ content: 'No permission to open this ticket type.', ephemeral: true }).catch(() => {});
+      return;
+    }
+    const modal = buildTicketModal(ticketType);
+    await interaction.showModal(modal).catch(() => {});
     return;
   }
 
