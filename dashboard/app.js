@@ -51,6 +51,25 @@ function fmt(ts) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+function escapeHtml(input) {
+  return String(input || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function formatTicketDetails(ticket) {
+  const answers = Array.isArray(ticket && ticket.intake) ? ticket.intake : [];
+  if (answers.length === 0) {
+    return '-';
+  }
+  return answers
+    .map((x) => `<div><strong>${escapeHtml(x.label || 'Field')}:</strong> ${escapeHtml(x.value || '-')}</div>`)
+    .join('');
+}
+
 function fillSelect(el, rows, labelKey = 'name', emptyText = '선택 가능한 항목 없음') {
   el.innerHTML = '';
 
@@ -97,6 +116,7 @@ function getFilteredClosedTickets(list) {
       return true;
     }
     const target = [t.ownerTag, t.ownerId, t.channelName, t.closeReason, t.ticketTypeLabel]
+      .concat((Array.isArray(t.intake) ? t.intake : []).map((x) => `${x.label || ''} ${x.value || ''}`))
       .map((x) => String(x || '').toLowerCase())
       .join(' ');
     return target.includes(search);
@@ -117,21 +137,21 @@ function renderTables() {
   $('closedCount').textContent = String(closedTickets.length);
 
   if (openTickets.length === 0) {
-    renderEmptyRow(openBody, 6, '열린 티켓이 없습니다.');
+    renderEmptyRow(openBody, 7, '열린 티켓이 없습니다.');
   } else {
     for (const t of openTickets) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${ticketStatusChip(t)}</td><td>${t.ownerTag || t.ownerId}</td><td>${t.channelName}</td><td>${fmt(t.createdAt)}</td>`;
+      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${ticketStatusChip(t)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${escapeHtml(t.channelName)}</td><td>${formatTicketDetails(t)}</td><td>${fmt(t.createdAt)}</td>`;
       openBody.appendChild(tr);
     }
   }
 
   if (filteredClosed.length === 0) {
-    renderEmptyRow(closedBody, 5, '조건에 맞는 닫힌 티켓이 없습니다.');
+    renderEmptyRow(closedBody, 6, '조건에 맞는 닫힌 티켓이 없습니다.');
   } else {
     for (const t of filteredClosed) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${t.ownerTag || t.ownerId}</td><td>${fmt(t.closedAt)}</td><td>${t.closeReason || '-'}</td>`;
+      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${t.ticketTypeLabel}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.closedAt)}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.closeReason || '-')}</td>`;
       closedBody.appendChild(tr);
     }
   }

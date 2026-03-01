@@ -57,7 +57,7 @@ const TICKET_SCHEMAS = {
     fields: [
       { id: 'date', label: 'Date', placeholder: 'Example: 2026-03-01', style: 'short', required: true },
       { id: 'ts', label: 'TS (Trainset)', placeholder: 'Example: TS-1234 (Trainset ID)', style: 'short', required: true },
-      { id: 'location', label: 'Location', placeholder: 'Example: Depot A, Track 4', style: 'short', required: true },
+      { id: 'location', label: 'Train Location (Car/Part)', placeholder: 'Example: Car 4 - Door actuator', style: 'short', required: true },
       { id: 'fault', label: 'Fault', placeholder: 'Example: Door control fault on Car 3', style: 'paragraph', required: true }
     ]
   },
