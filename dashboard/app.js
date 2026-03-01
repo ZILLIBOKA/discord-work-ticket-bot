@@ -46,6 +46,7 @@ function masterAuthHeaders() {
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
+    credentials: 'same-origin',
     headers: {
       ...(options.headers || {}),
       ...authHeaders()
@@ -61,6 +62,7 @@ async function api(path, options = {}) {
 async function apiMaster(path, options = {}) {
   const res = await fetch(path, {
     ...options,
+    credentials: 'same-origin',
     headers: {
       ...(options.headers || {}),
       ...masterAuthHeaders()
