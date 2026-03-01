@@ -799,6 +799,9 @@ function startDashboardServer() {
     const fetchedChannels = await guild.channels.fetch().catch(() => null);
     await guild.roles.fetch().catch(() => null);
     await guild.members.fetch({ limit: 1000 }).catch(() => null);
+    if (guild.members.cache.size < 2 && typeof guild.members.list === 'function') {
+      await guild.members.list({ limit: 1000 }).catch(() => null);
+    }
     const botMember = await guild.members.fetchMe().catch(() => null);
     const openTickets = Object.entries(guildState.ticketChannels || {})
       .map(([channelId, meta]) => serializeTicket(guild, channelId, meta))
@@ -865,6 +868,18 @@ function startDashboardServer() {
         .map((id) => ({ id, name: `User ID ${id}` }));
     }
 
+    let safeRoleOptions = roleOptions;
+    if (safeRoleOptions.length === 0) {
+      safeRoleOptions = [
+        guildState.tickets.supportRoleId,
+        guildState.tickets.technicianRoleId,
+        guildState.tickets.engineerRoleId,
+        ...(guildState.tickets.managerRoleIds || [])
+      ]
+        .filter(Boolean)
+        .map((id) => ({ id, name: `Role ID ${id}` }));
+    }
+
     res.json({
       guild: { id: guild.id, name: guild.name },
       settings: {
@@ -877,11 +892,18 @@ function startDashboardServer() {
       openTickets,
       closedTickets,
       textChannels,
-      roleOptions,
+      roleOptions: safeRoleOptions,
       memberOptions,
       channelStats: {
         totalFetched: candidateChannels.length,
         availableTextChannels: textChannels.length
+      },
+      memberStats: {
+        cachedMembers: guild.members.cache.size,
+        selectableMembers: memberOptions.length
+      },
+      roleStats: {
+        selectableRoles: safeRoleOptions.length
       }
     });
   });

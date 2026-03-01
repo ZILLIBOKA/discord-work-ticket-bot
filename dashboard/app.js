@@ -172,9 +172,13 @@ async function loadData() {
     ? data.channelStats.availableTextChannels
     : (data.textChannels || []).length;
   const memberCount = (data.memberOptions || []).length;
-  let status = `길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 공지 채널 ${available}개 · 멤버 ${memberCount}명`;
+  const roleCount = (data.roleOptions || []).length;
+  let status = `길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 채널 ${available}개 · 멤버 ${memberCount}명 · 역할 ${roleCount}개`;
   if (memberCount === 0) {
     status += ' (멤버 인텐트/권한 제한 가능)';
+  }
+  if (available === 0) {
+    status += ' (채널 권한 확인 필요)';
   }
   setStatus(status);
 }
