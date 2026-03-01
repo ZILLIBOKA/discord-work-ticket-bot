@@ -796,9 +796,10 @@ function startDashboardServer() {
     }
     const guildState = ensureGuild(guild.id);
 
-    await guild.channels.fetch().catch(() => null);
+    const fetchedChannels = await guild.channels.fetch().catch(() => null);
     await guild.roles.fetch().catch(() => null);
     await guild.members.fetch({ limit: 1000 }).catch(() => null);
+    const botMember = await guild.members.fetchMe().catch(() => null);
     const openTickets = Object.entries(guildState.ticketChannels || {})
       .map(([channelId, meta]) => serializeTicket(guild, channelId, meta))
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -816,10 +817,30 @@ function startDashboardServer() {
       return { id, label: r ? `${r.name} (${id})` : id };
     });
 
-    const textChannels = guild.channels.cache
-      .filter((ch) => ch.isTextBased() && ch.type !== ChannelType.DM)
+    const sourceChannels = fetchedChannels || guild.channels.cache;
+    const candidateChannels = Array.from(sourceChannels.values()).filter((ch) =>
+      ch && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement)
+    );
+
+    let textChannels = candidateChannels
+      .filter((ch) => {
+        if (!botMember) {
+          return true;
+        }
+        const perms = ch.permissionsFor(botMember);
+        return !!(perms &&
+          perms.has(PermissionsBitField.Flags.ViewChannel) &&
+          perms.has(PermissionsBitField.Flags.SendMessages));
+      })
       .map((ch) => ({ id: ch.id, name: ch.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
+
+    // Fallback: expose text channels even when permission calculation is unavailable.
+    if (textChannels.length === 0) {
+      textChannels = candidateChannels
+        .map((ch) => ({ id: ch.id, name: ch.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
 
     const roleOptions = guild.roles.cache
       .filter((r) => r.id !== guild.roles.everyone.id)
@@ -857,7 +878,11 @@ function startDashboardServer() {
       closedTickets,
       textChannels,
       roleOptions,
-      memberOptions
+      memberOptions,
+      channelStats: {
+        totalFetched: candidateChannels.length,
+        availableTextChannels: textChannels.length
+      }
     });
   });
 

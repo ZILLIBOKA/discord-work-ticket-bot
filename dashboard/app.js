@@ -168,7 +168,10 @@ async function loadData() {
   $('managerSummary').textContent = `사용자: ${(data.managerUsers || []).map((x) => x.label).join(', ') || '없음'} | 역할: ${(data.managerRoles || []).map((x) => x.label).join(', ') || '없음'}`;
   renderTables();
   setLastSync();
-  setStatus(`길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료`);
+  const available = data.channelStats && Number.isInteger(data.channelStats.availableTextChannels)
+    ? data.channelStats.availableTextChannels
+    : (data.textChannels || []).length;
+  setStatus(`길드 '${data.guild && data.guild.name ? data.guild.name : state.guildId}' 동기화 완료 · 공지 채널 ${available}개`);
 }
 
 function restartAutoRefresh() {
