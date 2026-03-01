@@ -597,14 +597,6 @@ $('load').addEventListener('click', async () => {
   }
 });
 
-$('loadMaster').addEventListener('click', async () => {
-  try {
-    await loadMasterData();
-  } catch (error) {
-    setStatus(`마스터 로드 실패: ${error.message}`, 'error');
-  }
-});
-
 $('guild').addEventListener('change', async () => {
   try {
     if (!hasDashboardAccess()) {
@@ -633,7 +625,7 @@ $('liveToggle').addEventListener('change', restartAutoRefresh);
 $('liveInterval').addEventListener('change', restartAutoRefresh);
 
 $('overviewTabBtn').addEventListener('click', () => switchTab('overview'));
-$('masterTabBtn').addEventListener('click', () => {
+$('masterTabBtn').addEventListener('click', async () => {
   if (!hasDashboardAccess()) {
     setStatus('먼저 Discord 로그인 후 접근하세요.', 'error');
     return;
@@ -643,6 +635,9 @@ $('masterTabBtn').addEventListener('click', () => {
     return;
   }
   switchTab('master');
+  await loadMasterData().catch((error) => {
+    setStatus(`마스터 자동 로드 실패: ${error.message}`, 'error');
+  });
 });
 $('opsTabBtn').addEventListener('click', () => {
   if (!hasDashboardAccess()) {
