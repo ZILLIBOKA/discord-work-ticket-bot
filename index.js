@@ -49,6 +49,7 @@ const TECHNICAL_LEAD_ROLE_NAME = String(process.env.TECHNICAL_LEAD_ROLE_NAME || 
 const SLASH_GUILD_ID = String(process.env.SLASH_GUILD_ID || '').trim();
 const REGISTER_ALL_GUILD_SLASH_COMMANDS = /^(1|true|yes)$/i.test(String(process.env.REGISTER_ALL_GUILD_SLASH_COMMANDS || 'true'));
 const REGISTER_GLOBAL_SLASH_COMMANDS = /^(1|true|yes)$/i.test(String(process.env.REGISTER_GLOBAL_SLASH_COMMANDS || 'false'));
+const PRUNE_GLOBAL_SLASH_COMMANDS = /^(1|true|yes)$/i.test(String(process.env.PRUNE_GLOBAL_SLASH_COMMANDS || 'true'));
 const ENABLE_GUILD_MEMBERS_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_GUILD_MEMBERS_INTENT || 'false'));
 const ENABLE_MESSAGE_CONTENT_INTENT = /^(1|true|yes)$/i.test(String(process.env.ENABLE_MESSAGE_CONTENT_INTENT || 'false'));
 
@@ -987,6 +988,9 @@ async function registerSlashCommands(clientInstance) {
   if (!guildTargetIds.size || REGISTER_GLOBAL_SLASH_COMMANDS) {
     await rest.put(Routes.applicationCommands(clientInstance.user.id), { body: commands });
     console.log('[slash] registered global commands');
+  } else if (PRUNE_GLOBAL_SLASH_COMMANDS) {
+    await rest.put(Routes.applicationCommands(clientInstance.user.id), { body: [] });
+    console.log('[slash] pruned stale global commands');
   }
 }
 
