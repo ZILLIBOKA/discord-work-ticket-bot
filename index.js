@@ -244,6 +244,7 @@ const db = loadDb();
 const xpCooldown = new Map();
 const dashboardOauthStates = new Map();
 const dashboardSessions = new Map();
+const dashboardQrAuthSessions = new Map();
 
 function ensureGuild(guildId) {
   if (!db.guilds[guildId]) {
@@ -877,6 +878,11 @@ function cleanupDashboardSessions() {
       dashboardSessions.delete(sid);
     }
   }
+  for (const [qid, session] of dashboardQrAuthSessions.entries()) {
+    if (!session || session.expiresAt <= now) {
+      dashboardQrAuthSessions.delete(qid);
+    }
+  }
 }
 
 function getDashboardAuthUser(req) {
@@ -911,6 +917,15 @@ function setDashboardSessionCookie(res, sid) {
 
 function clearDashboardSessionCookie(res) {
   res.setHeader('Set-Cookie', 'dashboard_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+}
+
+function createDashboardSession(res, user) {
+  const sid = crypto.randomBytes(24).toString('hex');
+  dashboardSessions.set(sid, {
+    user,
+    expiresAt: Date.now() + (1000 * 60 * 60 * 24 * 7)
+  });
+  setDashboardSessionCookie(res, sid);
 }
 
 function isTechnicalLeadMember(member) {
@@ -1291,6 +1306,63 @@ function startDashboardServer() {
     res.json({ ok: true });
   });
 
+  app.post('/api/auth/qr/create', (req, res) => {
+    if (!DISCORD_OAUTH_ENABLED) {
+      return res.status(503).json({ error: 'Discord OAuth is not configured' });
+    }
+    cleanupDashboardSessions();
+    const qrSessionId = crypto.randomBytes(16).toString('hex');
+    dashboardQrAuthSessions.set(qrSessionId, {
+      status: 'pending',
+      user: null,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + (1000 * 60 * 5)
+    });
+
+    const state = crypto.randomBytes(16).toString('hex');
+    dashboardOauthStates.set(state, {
+      returnTo: '/',
+      qrSessionId,
+      expiresAt: Date.now() + (1000 * 60 * 10)
+    });
+
+    const authUrl = new URL('https://discord.com/oauth2/authorize');
+    authUrl.searchParams.set('client_id', DISCORD_CLIENT_ID);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('redirect_uri', DISCORD_REDIRECT_URI);
+    authUrl.searchParams.set('scope', 'identify');
+    authUrl.searchParams.set('state', state);
+
+    return res.json({
+      ok: true,
+      qrSessionId,
+      loginUrl: authUrl.toString(),
+      expiresInSec: 300
+    });
+  });
+
+  app.get('/api/auth/qr/status', (req, res) => {
+    cleanupDashboardSessions();
+    const qrSessionId = String(req.query.qrSessionId || '').trim();
+    if (!qrSessionId) {
+      return res.status(400).json({ error: 'qrSessionId required' });
+    }
+    const qrSession = dashboardQrAuthSessions.get(qrSessionId);
+    if (!qrSession) {
+      return res.json({ ok: true, status: 'expired' });
+    }
+    if (qrSession.expiresAt <= Date.now()) {
+      dashboardQrAuthSessions.delete(qrSessionId);
+      return res.json({ ok: true, status: 'expired' });
+    }
+    if (qrSession.status === 'approved' && qrSession.user) {
+      createDashboardSession(res, qrSession.user);
+      dashboardQrAuthSessions.delete(qrSessionId);
+      return res.json({ ok: true, status: 'approved' });
+    }
+    return res.json({ ok: true, status: 'pending' });
+  });
+
   app.get('/auth/discord/start', (req, res) => {
     if (!DISCORD_OAUTH_ENABLED) {
       return res.status(503).send('Discord OAuth is not configured');
@@ -1352,18 +1424,23 @@ function startDashboardServer() {
         throw new Error(`profile fetch failed: ${txt}`);
       }
       const me = await meRes.json();
-      const sid = crypto.randomBytes(24).toString('hex');
-      dashboardSessions.set(sid, {
-        user: {
-          id: String(me.id || ''),
-          username: String(me.username || ''),
-          globalName: String(me.global_name || ''),
-          discriminator: String(me.discriminator || ''),
-          avatar: String(me.avatar || '')
-        },
-        expiresAt: Date.now() + (1000 * 60 * 60 * 24 * 7)
-      });
-      setDashboardSessionCookie(res, sid);
+      const user = {
+        id: String(me.id || ''),
+        username: String(me.username || ''),
+        globalName: String(me.global_name || ''),
+        discriminator: String(me.discriminator || ''),
+        avatar: String(me.avatar || '')
+      };
+      if (stateRow.qrSessionId) {
+        const qrSession = dashboardQrAuthSessions.get(String(stateRow.qrSessionId));
+        if (qrSession) {
+          qrSession.status = 'approved';
+          qrSession.user = user;
+          dashboardQrAuthSessions.set(String(stateRow.qrSessionId), qrSession);
+        }
+        return res.send('QR login approved. Return to your original dashboard screen.');
+      }
+      createDashboardSession(res, user);
       return res.redirect(stateRow.returnTo || '/');
     } catch (error) {
       console.error('[dashboard] oauth callback failed', error);

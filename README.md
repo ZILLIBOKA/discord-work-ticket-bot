@@ -16,6 +16,7 @@
   - `Operations`: 티켓 번호 재정렬
   - `Master`: 임베드 공지 전송 + Operations 권한 설정
 - Discord OAuth 로그인 연동
+  - QR 로그인 지원 (스캔 후 원래 대시보드 화면에서 자동 로그인 완료)
 - Master 접근 제한: Technical Lead 계정만 허용
 
 ## 2. 필수 준비

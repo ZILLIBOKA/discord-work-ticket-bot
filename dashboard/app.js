@@ -12,6 +12,7 @@ const state = {
   masterData: null,
   masterActorsByGuild: {},
   selectedOpsTicketNos: new Set(),
+  qrPollingTimer: null,
   refreshTimer: null,
   activeTab: 'overview'
 };
@@ -30,6 +31,47 @@ function setStatus(message, type = 'info') {
 function setLastSync() {
   const d = new Date();
   $('lastSync').textContent = `마지막 동기화: ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
+function stopQrPolling() {
+  if (state.qrPollingTimer) {
+    clearInterval(state.qrPollingTimer);
+    state.qrPollingTimer = null;
+  }
+}
+
+async function startQrPolling(qrSessionId) {
+  stopQrPolling();
+  state.qrPollingTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/auth/qr/status?qrSessionId=${encodeURIComponent(qrSessionId)}`, {
+        credentials: 'same-origin'
+      });
+      if (!res.ok) {
+        return;
+      }
+      const data = await res.json();
+      if (!data || data.status === 'pending') {
+        return;
+      }
+      stopQrPolling();
+      if (data.status === 'approved') {
+        $('qrModal').style.display = 'none';
+        await loadAuthUser();
+        if (hasDashboardAccess()) {
+          await loadGuilds();
+          await loadData();
+          restartAutoRefresh();
+          setStatus('QR 로그인 완료');
+        }
+        return;
+      }
+      if (data.status === 'expired') {
+        $('qrModal').style.display = 'none';
+        setStatus('QR 로그인 시간이 만료되었습니다. 다시 시도하세요.', 'error');
+      }
+    } catch (_error) {}
+  }, 2000);
 }
 
 function authHeaders() {
@@ -731,16 +773,40 @@ $('discordQrBtn').addEventListener('click', () => {
     setStatus('Discord OAuth 미설정입니다. 먼저 OAuth 환경변수를 설정해주세요.', 'error');
     return;
   }
-  const loginUrl = buildDiscordLoginUrl();
-  $('discordQrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(loginUrl)}`;
-  $('discordQrOpenLink').href = loginUrl;
-  $('qrModal').style.display = 'flex';
+  fetch('/api/auth/qr/create', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' }
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      return res.json();
+    })
+    .then((data) => {
+      const loginUrl = String(data && data.loginUrl ? data.loginUrl : '').trim();
+      const qrSessionId = String(data && data.qrSessionId ? data.qrSessionId : '').trim();
+      if (!loginUrl || !qrSessionId) {
+        throw new Error('QR login URL 생성 실패');
+      }
+      $('discordQrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(loginUrl)}`;
+      $('discordQrOpenLink').href = loginUrl;
+      $('qrModal').style.display = 'flex';
+      startQrPolling(qrSessionId);
+    })
+    .catch((error) => {
+      setStatus(`QR 로그인 준비 실패: ${error.message}`, 'error');
+    });
 });
 $('discordQrCloseBtn').addEventListener('click', () => {
+  stopQrPolling();
   $('qrModal').style.display = 'none';
 });
 $('qrModal').addEventListener('click', (event) => {
   if (event.target === $('qrModal')) {
+    stopQrPolling();
     $('qrModal').style.display = 'none';
   }
 });
