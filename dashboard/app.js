@@ -77,11 +77,21 @@ async function loadAuthConfig() {
     }
     const data = await res.json();
     state.oauthEnabled = !!data.enabled;
-    $('discordLoginBtn').style.display = state.oauthEnabled ? '' : 'none';
-    $('discordLogoutBtn').style.display = state.oauthEnabled ? '' : 'none';
+    $('discordLoginBtn').style.display = '';
+    $('discordLogoutBtn').style.display = '';
+    $('discordLoginBtn').disabled = !state.oauthEnabled;
+    $('discordLogoutBtn').disabled = !state.oauthEnabled;
+    $('discordLoginBtn').style.opacity = state.oauthEnabled ? '1' : '0.5';
+    $('discordLogoutBtn').style.opacity = state.oauthEnabled ? '1' : '0.5';
     $('discordLoginBtn').dataset.loginPath = data.loginPath || '/auth/discord/start';
   } catch (_error) {
-    // keep default
+    state.oauthEnabled = false;
+    $('discordLoginBtn').style.display = '';
+    $('discordLogoutBtn').style.display = '';
+    $('discordLoginBtn').disabled = true;
+    $('discordLogoutBtn').disabled = true;
+    $('discordLoginBtn').style.opacity = '0.5';
+    $('discordLogoutBtn').style.opacity = '0.5';
   }
 }
 
@@ -109,8 +119,12 @@ function renderAuthStatus() {
     $('discordLogoutBtn').style.display = '';
   } else {
     $('authUserText').textContent = state.oauthEnabled ? 'Discord 로그인 필요' : 'Discord OAuth 미설정';
-    $('discordLoginBtn').style.display = state.oauthEnabled ? '' : 'none';
-    $('discordLogoutBtn').style.display = state.oauthEnabled ? '' : 'none';
+    $('discordLoginBtn').style.display = '';
+    $('discordLogoutBtn').style.display = '';
+    $('discordLoginBtn').disabled = !state.oauthEnabled;
+    $('discordLogoutBtn').disabled = !state.oauthEnabled;
+    $('discordLoginBtn').style.opacity = state.oauthEnabled ? '1' : '0.5';
+    $('discordLogoutBtn').style.opacity = state.oauthEnabled ? '1' : '0.5';
   }
   applyAuthUserToInputs();
 }
@@ -520,11 +534,19 @@ $('masterTabBtn').addEventListener('click', () => {
   switchTab('master');
 });
 $('discordLoginBtn').addEventListener('click', () => {
+  if (!state.oauthEnabled) {
+    setStatus('Discord OAuth가 설정되지 않았습니다. Koyeb 환경변수를 확인해주세요.', 'error');
+    return;
+  }
   const loginPath = $('discordLoginBtn').dataset.loginPath || '/auth/discord/start';
   const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   window.location.href = `${loginPath}?returnTo=${encodeURIComponent(returnTo)}`;
 });
 $('discordLogoutBtn').addEventListener('click', async () => {
+  if (!state.oauthEnabled) {
+    setStatus('Discord OAuth가 설정되지 않았습니다.', 'error');
+    return;
+  }
   try {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
     state.authUser = null;
