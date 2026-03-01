@@ -1900,8 +1900,8 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (name === 'ticketpanel') {
-      if (!canModerate(member)) {
-        await interaction.reply({ content: 'No permission.', ephemeral: true }).catch(() => {});
+      if (!isTechnicalLeadMember(member)) {
+        await interaction.reply({ content: 'Only Technical Lead can use /ticketpanel.', ephemeral: true }).catch(() => {});
         return;
       }
       const selectedType = String(interaction.options.getString('type') || 'all');
