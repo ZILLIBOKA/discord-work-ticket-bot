@@ -362,6 +362,36 @@
       text-align: center;
       padding: 18px 10px;
     }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 18, 38, 0.58);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 16px;
+    }
+    .modal-box {
+      width: min(420px, 100%);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+    .qr-wrap {
+      display: grid;
+      place-items: center;
+      margin: 12px 0;
+    }
+    .qr-wrap img {
+      width: 240px;
+      height: 240px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
 
     @media (max-width: 980px) {
       .grid { grid-template-columns: 1fr; }
@@ -528,6 +558,7 @@
 
       <div id="authRow" class="row" style="margin-bottom:10px;">
         <button id="discordLoginBtn" class="btn btn-soft">Discord Login</button>
+        <button id="discordQrBtn" class="btn btn-soft">QR Login</button>
         <button id="discordLogoutBtn" class="btn btn-soft">Logout</button>
         <span id="authUserText" class="fine">Discord 로그인 필요</span>
       </div>
@@ -753,6 +784,22 @@
       <p id="masterSummary" class="fine" style="margin-top:10px;">마스터 데이터 미로딩</p>
     </section>
   </main>
+
+  <div id="qrModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
+    <div class="modal-box">
+      <div class="title-row" style="margin-bottom:4px;">
+        <h3 id="qrModalTitle" class="title" style="font-size:18px;">Discord QR Login</h3>
+      </div>
+      <p class="fine">휴대폰으로 QR을 스캔하면 Discord OAuth 로그인 페이지가 열립니다.</p>
+      <div class="qr-wrap">
+        <img id="discordQrImage" alt="Discord OAuth QR" />
+      </div>
+      <div class="row">
+        <a id="discordQrOpenLink" class="btn btn-soft" target="_blank" rel="noopener noreferrer">브라우저에서 열기</a>
+        <button id="discordQrCloseBtn" class="btn btn-primary">닫기</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>
