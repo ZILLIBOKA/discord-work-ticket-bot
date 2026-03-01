@@ -261,6 +261,12 @@
     .master-col .label {
       margin-bottom: 8px;
     }
+    .master-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
     .select[multiple] {
       min-height: 220px;
       padding: 6px;
@@ -372,6 +378,7 @@
       .metrics { grid-template-columns: 1fr; }
       .filters { grid-template-columns: 1fr; }
       .master-grid { grid-template-columns: 1fr; }
+      .master-actions { grid-template-columns: 1fr; }
       .tabs {
         width: 100%;
         display: grid;
@@ -682,30 +689,25 @@
       </div>
       <div class="master-grid">
         <div class="master-col">
-          <p class="label">사용자 선택 (이름 | 역할 | ID)</p>
+          <p class="label">사용자 권한 관리</p>
+          <p class="fine" style="margin-bottom:8px;">대상 사용자 (이름 | 역할 | ID)</p>
           <select id="masterOperatorMemberMulti" class="select" multiple size="10"></select>
-        </div>
-        <div class="master-col">
-          <p class="label">역할 선택</p>
-          <select id="masterOperatorRoleMulti" class="select" multiple size="10"></select>
-        </div>
-      </div>
-      <div class="row" style="margin-top:8px;">
-        <button id="masterAddOperatorUsers" class="btn btn-primary">선택 사용자 권한 추가</button>
-        <button id="masterRemoveOperatorUsers" class="btn btn-danger">선택 사용자 권한 제거</button>
-      </div>
-      <div class="row" style="margin-top:8px;">
-        <button id="masterAddOperatorRoles" class="btn btn-primary">선택 역할 권한 추가</button>
-        <button id="masterRemoveOperatorRoles" class="btn btn-danger">선택 역할 권한 제거</button>
-      </div>
-      <p class="label" style="margin-top:10px;">Current Operations Permission</p>
-      <div class="master-grid">
-        <div class="master-col">
-          <p class="label">현재 사용자 권한</p>
+          <div class="master-actions">
+            <button id="masterAddOperatorUsers" class="btn btn-primary">선택 사용자 추가</button>
+            <button id="masterRemoveOperatorUsers" class="btn btn-danger">선택 사용자 제거</button>
+          </div>
+          <p class="fine" style="margin:10px 0 8px;">현재 사용자 권한</p>
           <select id="masterCurrentOperatorUsers" class="select" multiple size="8"></select>
         </div>
         <div class="master-col">
-          <p class="label">현재 역할 권한</p>
+          <p class="label">역할 권한 관리</p>
+          <p class="fine" style="margin-bottom:8px;">대상 역할</p>
+          <select id="masterOperatorRoleMulti" class="select" multiple size="10"></select>
+          <div class="master-actions">
+            <button id="masterAddOperatorRoles" class="btn btn-primary">선택 역할 추가</button>
+            <button id="masterRemoveOperatorRoles" class="btn btn-danger">선택 역할 제거</button>
+          </div>
+          <p class="fine" style="margin:10px 0 8px;">현재 역할 권한</p>
           <select id="masterCurrentOperatorRoles" class="select" multiple size="8"></select>
         </div>
       </div>
