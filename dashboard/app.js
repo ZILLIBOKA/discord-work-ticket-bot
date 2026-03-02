@@ -400,11 +400,56 @@ function renderMasterErpAuditRows(rows) {
     return;
   }
   for (const row of list) {
-    const detailText = escapeHtml(JSON.stringify(row.detail || {}));
+    const detailText = formatErpAuditDetail(row.action, row.detail || {});
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${fmt(row.at)}</td><td>${escapeHtml(row.sheetKey || '-')}</td><td>${row.rowNo || '-'}</td><td>${escapeHtml(row.action || '-')}</td><td>${escapeHtml(row.actorName || row.actorUserId || '-')}<br><span class="fine">${escapeHtml(row.actorUserId || '')}</span></td><td><code>${detailText}</code></td>`;
+    tr.innerHTML = `<td>${fmt(row.at)}</td><td>${escapeHtml(row.sheetKey || '-')}</td><td>${row.rowNo || '-'}</td><td>${escapeHtml(row.action || '-')}</td><td>${escapeHtml(row.actorName || row.actorUserId || '-')}<br><span class="fine">${escapeHtml(row.actorUserId || '')}</span></td><td>${detailText}</td>`;
     tbody.appendChild(tr);
   }
+}
+
+function formatErpAuditDetail(action, detail) {
+  const safe = detail && typeof detail === 'object' ? detail : {};
+  const before = safe.before && typeof safe.before === 'object' ? safe.before : {};
+  const after = safe.after && typeof safe.after === 'object' ? safe.after : {};
+
+  if (action === 'update' && (Object.keys(before).length || Object.keys(after).length)) {
+    const keys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)]));
+    if (!keys.length) return '<span class="fine">변경 없음</span>';
+    return keys
+      .map((key) => {
+        const b = escapeHtml(String(before[key] == null ? '' : before[key]));
+        const a = escapeHtml(String(after[key] == null ? '' : after[key]));
+        return `<div><strong>${escapeHtml(key)}</strong>: <span style="color:#8a4b00;">${b || '(empty)'}</span> → <span style="color:#0d6d4c;">${a || '(empty)'}</span></div>`;
+      })
+      .join('');
+  }
+
+  if (safe.values && typeof safe.values === 'object') {
+    const pairs = Object.entries(safe.values);
+    if (!pairs.length) return '<span class="fine">상세 없음</span>';
+    return pairs
+      .map(([key, value]) => `<div><strong>${escapeHtml(key)}</strong>: ${escapeHtml(String(value == null ? '' : value)) || '(empty)'}</div>`)
+      .join('');
+  }
+
+  if (typeof safe.removedCount === 'number') {
+    const rowNos = Array.isArray(safe.rowNos) && safe.rowNos.length
+      ? ` (#${safe.rowNos.join(', #')})`
+      : '';
+    return `<div>건수: ${safe.removedCount}${rowNos}</div>`;
+  }
+
+  if (typeof safe.restoredCount === 'number') {
+    const rowNos = Array.isArray(safe.rowNos) && safe.rowNos.length
+      ? ` (#${safe.rowNos.join(', #')})`
+      : '';
+    return `<div>복구: ${safe.restoredCount}${rowNos}</div>`;
+  }
+
+  if (Object.keys(safe).length) {
+    return `<code>${escapeHtml(JSON.stringify(safe))}</code>`;
+  }
+  return '<span class="fine">상세 없음</span>';
 }
 
 function renderEmptyRow(tbody, colCount, text) {
