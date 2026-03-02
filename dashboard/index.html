@@ -268,50 +268,6 @@
       gap: 8px;
       margin-top: 8px;
     }
-    .erp-form-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(220px, 1fr));
-      gap: 10px;
-      margin-top: 8px;
-    }
-    .erp-form-item {
-      display: grid;
-      gap: 6px;
-    }
-    .erp-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    .modal-grid {
-      display: grid;
-      gap: 10px;
-    }
-    .sheet-embed {
-      width: 100%;
-      min-height: 420px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #fff;
-    }
-    .erp-status {
-      display: inline-block;
-      padding: 3px 9px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 700;
-      border: 1px solid #c8d6f0;
-      background: #f4f8ff;
-      color: #1d325e;
-      white-space: nowrap;
-    }
-    .erp-status.important { background: #fbeaec; border-color: #f0b7be; color: #b72b3f; }
-    .erp-status.cleared { background: #e8f9ef; border-color: #b5e4c7; color: #0d7e56; }
-    .erp-status.pending { background: #f3f3f6; border-color: #dddde4; color: #4e5568; }
-    .erp-status.inprogress { background: #fff0e3; border-color: #f2cfab; color: #9a5a14; }
-    .erp-status.notstarted { background: #fff8dd; border-color: #efdb96; color: #88620f; }
-    .erp-status.noissue { background: #e8f2ff; border-color: #bdd3f7; color: #1959b2; }
     .select[multiple] {
       min-height: 220px;
       padding: 6px;
@@ -464,11 +420,10 @@
       .filters { grid-template-columns: 1fr; }
       .master-grid { grid-template-columns: 1fr; }
       .master-actions { grid-template-columns: 1fr; }
-      .erp-form-grid { grid-template-columns: 1fr; }
       .tabs {
         width: 100%;
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr 1fr 1fr;
       }
       .tab-btn {
         width: 100%;
@@ -606,7 +561,6 @@
         <div class="tabs">
           <button id="overviewTabBtn" class="tab-btn active">Overview</button>
           <button id="opsTabBtn" class="tab-btn">Operations</button>
-          <button id="erpTabBtn" class="tab-btn">ERP</button>
           <button id="masterTabBtn" class="tab-btn">Master</button>
         </div>
       </div>
@@ -769,43 +723,6 @@
       </div>
     </section>
 
-    <section id="erpSection" class="panel" style="display:none;">
-      <h2 class="title" style="font-size:18px; margin-bottom:10px;">ERP Workspace</h2>
-      <div class="row">
-        <select id="erpSheetSelect" class="select"></select>
-        <button id="erpReloadBtn" class="btn btn-soft">새로고침</button>
-        <button id="erpOpenFilterModal" class="btn btn-soft">필터 (팝업)</button>
-        <button id="erpOpenImportModal" class="btn btn-soft">파일 가져오기 (팝업)</button>
-        <button id="erpOpenBulkEditModal" class="btn btn-soft">선택 편집 (팝업)</button>
-        <button id="erpExportBtn" class="btn btn-primary">Excel Export (.xlsx)</button>
-      </div>
-      <div class="row" style="margin-top:8px;">
-        <button id="erpOpenAddModal" class="btn btn-primary">행 추가 (팝업)</button>
-        <label class="chip"><input id="erpQuickEditToggle" type="checkbox" style="margin-right:6px;" /> 빠른 수정 모드(더블클릭)</label>
-        <span id="erpSelectedInfo" class="fine">선택된 행: 0</span>
-      </div>
-      <p class="fine" style="margin-top:6px;">수정 버튼 또는 더블클릭으로 수정할 수 있습니다.</p>
-      <p id="erpFilterSummaryText" class="fine" style="margin-top:6px;">필터: 없음</p>
-      <p id="erpSummaryText" class="fine" style="margin-top:6px;">요약 없음</p>
-
-      <section class="panel" style="margin-top:12px;">
-        <h3 class="title" style="font-size:16px; margin-bottom:6px;">Google Sheet View</h3>
-        <p id="erpSheetEmbedHint" class="fine" style="margin-bottom:8px;">Master에서 Google Sheet URL을 설정하면 여기에 표시됩니다.</p>
-        <iframe id="erpGoogleSheetFrame" class="sheet-embed" src="" title="Google Sheet Embed"></iframe>
-      </section>
-
-      <div class="table-wrap" style="margin-top:12px;">
-        <table id="erpTable">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="row" style="margin-top:10px;">
-        <button id="erpDeleteSelectedBtn" class="btn btn-danger">선택 행 삭제</button>
-        <button id="erpOpenRestoreModal" class="btn btn-soft">삭제행 복구 (팝업)</button>
-      </div>
-    </section>
-
     <section id="masterSection" class="panel" style="display:none;">
       <h2 class="title" style="font-size:18px; margin-bottom:10px;">Master Console</h2>
       <p class="fine" style="margin-bottom:10px;">Operations 권한(사용자/역할)만 관리합니다.</p>
@@ -838,15 +755,6 @@
           <button id="masterRestoreDeletedTickets" class="btn btn-primary">선택 티켓 복구</button>
         </div>
         <p id="masterRestoreResult" class="result"></p>
-      </section>
-
-      <section class="panel" style="margin-bottom:12px;">
-        <h2 class="title" style="font-size:18px; margin-bottom:10px;">Google Sheet URL</h2>
-        <input id="masterGoogleSheetUrl" class="field" placeholder="https://docs.google.com/spreadsheets/d/.../edit#gid=0" />
-        <div class="row" style="margin-top:8px;">
-          <button id="masterSaveGoogleSheetBtn" class="btn btn-primary">URL 저장</button>
-        </div>
-        <p id="masterGoogleSheetResult" class="result"></p>
       </section>
 
       <p class="label" style="margin-top:12px;">Operations Permission</p>
@@ -896,35 +804,6 @@
           <tbody></tbody>
         </table>
       </div>
-      <section class="panel" style="margin-top:12px;">
-        <h2 class="title" style="font-size:18px; margin-bottom:10px;">ERP Edit Audit</h2>
-        <div class="row">
-          <select id="masterErpAuditSheet" class="select">
-            <option value="">전체 시트</option>
-            <option value="work_list">Project Work List</option>
-            <option value="asset_list">Asset List</option>
-            <option value="material_use">Material Use</option>
-          </select>
-          <input id="masterErpAuditRowNo" class="field" placeholder="Row No (optional)" />
-          <input id="masterErpAuditKeyword" class="field" placeholder="키워드 포함 검색" />
-          <button id="masterLoadErpAuditBtn" class="btn btn-soft">로그 조회</button>
-        </div>
-        <div class="table-wrap" style="margin-top:8px;">
-          <table id="masterErpAuditTable">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Sheet</th>
-                <th>Row No</th>
-                <th>Action</th>
-                <th>Actor</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
       <p id="masterSummary" class="fine" style="margin-top:10px;">마스터 데이터 미로딩</p>
     </section>
   </main>
@@ -941,94 +820,6 @@
       <div class="row">
         <a id="discordQrOpenLink" class="btn btn-soft" target="_blank" rel="noopener noreferrer">브라우저에서 열기</a>
         <button id="discordQrCloseBtn" class="btn btn-primary">닫기</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="erpModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpModalTitle">
-    <div class="modal-box" style="width:min(860px, 100%);">
-      <div class="title-row" style="margin-bottom:4px;">
-        <h3 id="erpModalTitle" class="title" style="font-size:18px;">ERP Row</h3>
-      </div>
-      <div id="erpFormFields" class="erp-form-grid"></div>
-      <div class="erp-actions">
-        <button id="erpSaveBtn" class="btn btn-primary">저장</button>
-        <button id="erpClearBtn" class="btn btn-soft">입력 초기화</button>
-        <button id="erpModalCloseBtn" class="btn btn-soft">닫기</button>
-      </div>
-      <p class="fine">단축키: `Ctrl/Cmd + S` 저장, `Esc` 닫기</p>
-      <p id="erpFormResult" class="result"></p>
-    </div>
-  </div>
-
-  <div id="erpImportModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpImportModalTitle">
-    <div class="modal-box" style="width:min(720px, 100%);">
-      <div class="title-row" style="margin-bottom:4px;">
-        <h3 id="erpImportModalTitle" class="title" style="font-size:18px;">CSV/XLSX 가져오기</h3>
-      </div>
-      <div class="modal-grid">
-        <input id="erpImportFile" class="field" type="file" accept=".csv,.xlsx,.xls" />
-        <label class="chip"><input id="erpImportReplaceAll" type="checkbox" style="margin-right:6px;" /> 기존 데이터 전체 교체</label>
-      </div>
-      <div class="erp-actions">
-        <button id="erpImportBtn" class="btn btn-primary">가져오기 실행</button>
-        <button id="erpImportModalCloseBtn" class="btn btn-soft">닫기</button>
-      </div>
-      <p id="erpImportResult" class="result"></p>
-    </div>
-  </div>
-
-  <div id="erpFilterModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpFilterModalTitle">
-    <div class="modal-box" style="width:min(760px, 100%);">
-      <div class="title-row" style="margin-bottom:4px;">
-        <h3 id="erpFilterModalTitle" class="title" style="font-size:18px;">ERP 필터</h3>
-      </div>
-      <div class="modal-grid">
-        <select id="erpFilterStatus" class="select">
-          <option value="">상태 전체</option>
-        </select>
-        <select id="erpFilterColumn" class="select">
-          <option value="all">모든 컬럼</option>
-        </select>
-        <input id="erpFilterKeyword" class="field" placeholder="포함 검색어 (contains)" />
-      </div>
-      <div class="erp-actions">
-        <button id="erpApplyFilterBtn" class="btn btn-primary">필터 적용</button>
-        <button id="erpClearFilterBtn" class="btn btn-soft">필터 초기화</button>
-        <button id="erpFilterModalCloseBtn" class="btn btn-soft">닫기</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="erpBulkEditModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpBulkEditModalTitle">
-    <div class="modal-box" style="width:min(760px, 100%);">
-      <div class="title-row" style="margin-bottom:4px;">
-        <h3 id="erpBulkEditModalTitle" class="title" style="font-size:18px;">선택 편집</h3>
-      </div>
-      <div class="modal-grid">
-        <select id="erpBulkEditColumn" class="select"></select>
-        <input id="erpBulkEditValue" class="field" placeholder="변경 값" />
-        <select id="erpBulkEditStatusValue" class="select" style="display:none;">
-          <option value="">상태 선택</option>
-        </select>
-      </div>
-      <div class="erp-actions">
-        <button id="erpRunBulkEditBtn" class="btn btn-primary">선택 행 일괄 수정</button>
-        <button id="erpBulkEditModalCloseBtn" class="btn btn-soft">닫기</button>
-      </div>
-      <p id="erpBulkEditResult" class="result"></p>
-    </div>
-  </div>
-
-  <div id="erpRestoreModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpRestoreModalTitle">
-    <div class="modal-box" style="width:min(760px, 100%);">
-      <div class="title-row" style="margin-bottom:4px;">
-        <h3 id="erpRestoreModalTitle" class="title" style="font-size:18px;">삭제행 복구</h3>
-      </div>
-      <select id="erpDeletedRowsSelect" class="select" multiple size="10"></select>
-      <div class="erp-actions">
-        <button id="erpRestoreSelectedBtn" class="btn btn-primary">선택 삭제행 복구</button>
-        <button id="erpRestoreModalCloseBtn" class="btn btn-soft">닫기</button>
       </div>
     </div>
   </div>
