@@ -843,6 +843,16 @@ function renderErp() {
   $('erpOpenAddModal').disabled = !canEdit;
   $('erpOpenImportModal').disabled = !canEdit;
   $('erpOpenBulkEditModal').disabled = !canEdit;
+  updateErpSelectionUi();
+}
+
+function updateErpSelectionUi() {
+  const selectedCount = state.erpSelectedRowIds.size;
+  $('erpSelectedInfo').textContent = `선택된 행: ${selectedCount}`;
+  const canEdit = !!(state.erpData && state.erpData.canEdit);
+  const enableSelectedActions = canEdit && selectedCount > 0;
+  $('erpOpenBulkEditModal').disabled = !enableSelectedActions;
+  $('erpDeleteSelectedBtn').disabled = !enableSelectedActions;
 }
 
 async function loadErpData() {
@@ -1212,6 +1222,7 @@ $('erpSheetSelect').addEventListener('change', () => {
   state.erpSelectedRowIds.clear();
   state.erpFilters = { status: '', column: 'all', keyword: '' };
   renderErp();
+  updateErpSelectionUi();
 });
 
 $('erpOpenAddModal').addEventListener('click', () => {
@@ -1595,6 +1606,7 @@ $('erpTable').addEventListener('change', (event) => {
       if (checked) state.erpSelectedRowIds.add(rowId);
       else state.erpSelectedRowIds.delete(rowId);
     }
+    updateErpSelectionUi();
     return;
   }
   if (target.classList.contains('erp-row-select')) {
@@ -1608,6 +1620,7 @@ $('erpTable').addEventListener('change', (event) => {
     if (selectAll) {
       selectAll.checked = all.length > 0 && selected === all.length;
     }
+    updateErpSelectionUi();
   }
 });
 
@@ -1626,6 +1639,7 @@ $('erpDeleteSelectedBtn').addEventListener('click', async () => {
     clearErpForm();
     await loadErpData();
     setStatus(`ERP ${result.removedCount || rowIds.length}개 행 삭제 완료`);
+    updateErpSelectionUi();
   } catch (error) {
     setStatus(`ERP 선택 삭제 실패: ${error.message}`, 'error');
   }
@@ -1644,6 +1658,7 @@ $('erpRestoreSelectedBtn').addEventListener('click', async () => {
     await loadErpData();
     setStatus(`ERP ${result.restoredCount || rowIds.length}개 행 복구 완료`);
     closeModal('erpRestoreModal');
+    updateErpSelectionUi();
   } catch (error) {
     setStatus(`ERP 복구 실패: ${error.message}`, 'error');
   }
