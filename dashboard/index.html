@@ -268,6 +268,39 @@
       gap: 8px;
       margin-top: 8px;
     }
+    .erp-form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .erp-form-item {
+      display: grid;
+      gap: 6px;
+    }
+    .erp-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .erp-status {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid #c8d6f0;
+      background: #f4f8ff;
+      color: #1d325e;
+      white-space: nowrap;
+    }
+    .erp-status.important { background: #fbeaec; border-color: #f0b7be; color: #b72b3f; }
+    .erp-status.cleared { background: #e8f9ef; border-color: #b5e4c7; color: #0d7e56; }
+    .erp-status.pending { background: #f3f3f6; border-color: #dddde4; color: #4e5568; }
+    .erp-status.inprogress { background: #fff0e3; border-color: #f2cfab; color: #9a5a14; }
+    .erp-status.notstarted { background: #fff8dd; border-color: #efdb96; color: #88620f; }
+    .erp-status.noissue { background: #e8f2ff; border-color: #bdd3f7; color: #1959b2; }
     .select[multiple] {
       min-height: 220px;
       padding: 6px;
@@ -420,10 +453,11 @@
       .filters { grid-template-columns: 1fr; }
       .master-grid { grid-template-columns: 1fr; }
       .master-actions { grid-template-columns: 1fr; }
+      .erp-form-grid { grid-template-columns: 1fr; }
       .tabs {
         width: 100%;
         display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-columns: 1fr 1fr;
       }
       .tab-btn {
         width: 100%;
@@ -561,6 +595,7 @@
         <div class="tabs">
           <button id="overviewTabBtn" class="tab-btn active">Overview</button>
           <button id="opsTabBtn" class="tab-btn">Operations</button>
+          <button id="erpTabBtn" class="tab-btn">ERP</button>
           <button id="masterTabBtn" class="tab-btn">Master</button>
         </div>
       </div>
@@ -720,6 +755,53 @@
             </table>
           </div>
         </section>
+      </div>
+    </section>
+
+    <section id="erpSection" class="panel" style="display:none;">
+      <h2 class="title" style="font-size:18px; margin-bottom:10px;">ERP Workspace</h2>
+      <div class="row">
+        <select id="erpSheetSelect" class="select"></select>
+        <select id="erpStatusFilter" class="select">
+          <option value="">전체 상태</option>
+        </select>
+        <input id="erpSearch" class="field" placeholder="검색 (모든 컬럼 대상)" />
+        <button id="erpReloadBtn" class="btn btn-soft">새로고침</button>
+        <button id="erpExportBtn" class="btn btn-primary">Excel Export (.xlsx)</button>
+      </div>
+      <p class="fine" style="margin-top:8px;">행을 선택하면 수정 모드로 전환됩니다.</p>
+      <p id="erpSummaryText" class="fine" style="margin-top:6px;">요약 없음</p>
+
+      <section class="panel" style="margin-top:12px;">
+        <h3 class="title" style="font-size:16px; margin-bottom:6px;">CSV/XLSX 가져오기</h3>
+        <div class="row">
+          <input id="erpImportFile" class="field" type="file" accept=".csv,.xlsx,.xls" />
+          <label class="chip"><input id="erpImportReplaceAll" type="checkbox" style="margin-right:6px;" /> 기존 데이터 전체 교체</label>
+          <button id="erpImportBtn" class="btn btn-primary">가져오기</button>
+        </div>
+        <p id="erpImportResult" class="result"></p>
+      </section>
+
+      <section class="panel" style="margin-top:12px;">
+        <h3 id="erpFormTitle" class="title" style="font-size:16px; margin-bottom:4px;">행 추가</h3>
+        <div id="erpFormFields" class="erp-form-grid"></div>
+        <div class="erp-actions">
+          <button id="erpSaveBtn" class="btn btn-primary">저장</button>
+          <button id="erpClearBtn" class="btn btn-soft">입력 초기화</button>
+        </div>
+        <p id="erpFormResult" class="result"></p>
+      </section>
+
+      <div class="table-wrap" style="margin-top:12px;">
+        <table id="erpTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="erpDeleteSelectedBtn" class="btn btn-danger">선택 행 삭제</button>
+        <select id="erpDeletedRowsSelect" class="select" multiple size="6"></select>
+        <button id="erpRestoreSelectedBtn" class="btn btn-soft">선택 삭제행 복구</button>
       </div>
     </section>
 

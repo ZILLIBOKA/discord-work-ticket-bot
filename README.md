@@ -14,6 +14,7 @@
 - Dashboard 탭 구조
   - `Overview`: 사용자/역할 목록, Live, History
   - `Operations`: 티켓 번호 재정렬
+  - `ERP`: Work List / Asset List / Material Use 입력/조회/수정/삭제 + Excel 내보내기
   - `Master`: 임베드 공지 전송 + Operations 권한 설정
 - Discord OAuth 로그인 연동
   - QR 로그인 지원 (스캔 후 원래 대시보드 화면에서 자동 로그인 완료)
@@ -127,6 +128,24 @@ create table if not exists public.bot_state (
 - Master 접근 조건
   1. Discord 로그인
   2. 로그인 계정이 해당 길드의 `Technical Lead` 역할 보유
+
+### 6.4 ERP
+- `ERP` 탭에서 아래 3개 시트를 선택해 관리
+  - `Project Work List`
+  - `Asset List`
+  - `Material Use`
+- 기능
+  - 행 추가/수정/삭제
+  - 다중 선택 삭제
+  - 삭제행 복구(휴지통)
+  - CSV/XLSX 대량 업로드(append 또는 전체 교체)
+  - 키워드 검색(현재 시트 전체 컬럼 대상)
+  - 상태 필터(Work List)
+  - 시트별 요약(총 건수/삭제 건수/상태별 건수)
+  - `Excel Export (.xlsx)` 버튼으로 현재 길드 ERP 데이터를 엑셀 파일로 다운로드
+- 권한
+  - 조회: 대시보드 로그인 사용자
+  - 수정/삭제: Operations 권한 또는 Technical Lead 권한 사용자
 
 ## 7. Discord 명령
 - `/open`

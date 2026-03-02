@@ -14,6 +14,10 @@ const state = {
   selectedOpsTicketNos: new Set(),
   qrPollingTimer: null,
   refreshTimer: null,
+  erpData: null,
+  erpEditingRowId: '',
+  erpSheet: localStorage.getItem('erp.sheet') || 'work_list',
+  erpSelectedRowIds: new Set(),
   activeTab: 'overview'
 };
 
@@ -240,6 +244,7 @@ function applyDashboardVisibility() {
   $('saveToken').style.display = showTokenUi ? '' : 'none';
   $('overviewSection').style.display = authed && state.activeTab === 'overview' ? '' : 'none';
   $('opsSection').style.display = authed && state.activeTab === 'ops' ? '' : 'none';
+  $('erpSection').style.display = authed && state.activeTab === 'erp' ? '' : 'none';
   $('masterSection').style.display = authed && state.activeTab === 'master' ? '' : 'none';
 }
 
@@ -420,9 +425,11 @@ function switchTab(tab) {
     state.activeTab = 'overview';
     $('overviewTabBtn').classList.add('active');
     $('opsTabBtn').classList.remove('active');
+    $('erpTabBtn').classList.remove('active');
     $('masterTabBtn').classList.remove('active');
     $('overviewSection').style.display = 'none';
     $('opsSection').style.display = 'none';
+    $('erpSection').style.display = 'none';
     $('masterSection').style.display = 'none';
     applyDashboardVisibility();
     return;
@@ -430,9 +437,11 @@ function switchTab(tab) {
   state.activeTab = tab;
   $('overviewSection').style.display = tab === 'overview' ? '' : 'none';
   $('opsSection').style.display = tab === 'ops' ? '' : 'none';
+  $('erpSection').style.display = tab === 'erp' ? '' : 'none';
   $('masterSection').style.display = tab === 'master' ? '' : 'none';
   $('overviewTabBtn').classList.toggle('active', tab === 'overview');
   $('opsTabBtn').classList.toggle('active', tab === 'ops');
+  $('erpTabBtn').classList.toggle('active', tab === 'erp');
   $('masterTabBtn').classList.toggle('active', tab === 'master');
   applyDashboardVisibility();
 }
@@ -548,6 +557,241 @@ function renderOperationsHistoryTable() {
   $('removeTicketNos').value = Array.from(state.selectedOpsTicketNos).sort((a, b) => a - b).join(', ');
 }
 
+function erpStatusClass(value) {
+  const key = String(value || '').toLowerCase().replace(/\s+/g, '');
+  if (key === 'inprogress') return 'inprogress';
+  if (key === 'notstarted') return 'notstarted';
+  if (key === 'noissue') return 'noissue';
+  if (key === 'important' || key === 'pending' || key === 'cleared') return key;
+  return '';
+}
+
+function currentErpSheet() {
+  const data = state.erpData || {};
+  const sheets = data.sheets || {};
+  const key = String($('erpSheetSelect').value || state.erpSheet || '').trim();
+  if (key && sheets[key]) {
+    state.erpSheet = key;
+    return { key, sheet: sheets[key] };
+  }
+  const firstKey = Object.keys(sheets)[0] || '';
+  state.erpSheet = firstKey;
+  return { key: firstKey, sheet: firstKey ? sheets[firstKey] : null };
+}
+
+function renderErpSheetSelect() {
+  const options = ((state.erpData && state.erpData.sheetOptions) || []).map((x) => ({
+    id: x.id,
+    name: `${x.name} (${x.count || 0})`
+  }));
+  fillSelect($('erpSheetSelect'), options, 'name', 'ERP 시트 없음', state.erpSheet);
+  state.erpSheet = $('erpSheetSelect').value || state.erpSheet;
+  localStorage.setItem('erp.sheet', state.erpSheet);
+}
+
+function renderErpStatusFilter() {
+  const { sheet } = currentErpSheet();
+  const select = $('erpStatusFilter');
+  const current = String(select.value || '');
+  select.innerHTML = '<option value="">전체 상태</option>';
+  const statusColumn = (sheet && sheet.columns || []).find((column) => column.id === 'status' && Array.isArray(column.options));
+  if (!statusColumn) {
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  for (const optionText of statusColumn.options) {
+    const opt = document.createElement('option');
+    opt.value = optionText;
+    opt.textContent = optionText;
+    select.appendChild(opt);
+  }
+  if (current && Array.from(select.options).some((opt) => opt.value === current)) {
+    select.value = current;
+  }
+}
+
+function clearErpForm() {
+  state.erpEditingRowId = '';
+  $('erpFormTitle').textContent = '행 추가';
+  $('erpFormResult').textContent = '';
+  $('erpFormResult').style.color = '';
+  for (const input of Array.from(document.querySelectorAll('#erpFormFields [data-erp-field]'))) {
+    input.value = '';
+  }
+}
+
+function renderErpForm() {
+  const { sheet } = currentErpSheet();
+  const wrap = $('erpFormFields');
+  wrap.innerHTML = '';
+  if (!sheet || !Array.isArray(sheet.columns)) {
+    return;
+  }
+  for (const column of sheet.columns) {
+    const item = document.createElement('div');
+    item.className = 'erp-form-item';
+    const label = document.createElement('label');
+    label.className = 'label';
+    label.textContent = column.label;
+    let input;
+    if (column.type === 'select' && Array.isArray(column.options)) {
+      input = document.createElement('select');
+      input.className = 'select';
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = '선택';
+      input.appendChild(empty);
+      for (const optionText of column.options) {
+        const opt = document.createElement('option');
+        opt.value = optionText;
+        opt.textContent = optionText;
+        input.appendChild(opt);
+      }
+    } else {
+      input = document.createElement('input');
+      input.className = 'field';
+      input.type = 'text';
+      input.placeholder = column.label;
+    }
+    input.id = `erpField_${column.id}`;
+    input.dataset.erpField = column.id;
+    item.appendChild(label);
+    item.appendChild(input);
+    wrap.appendChild(item);
+  }
+}
+
+function collectErpFormPayload() {
+  const { sheet } = currentErpSheet();
+  const payload = {};
+  for (const column of (sheet && sheet.columns) || []) {
+    const el = $(`erpField_${column.id}`);
+    payload[column.id] = String((el && el.value) || '').trim();
+  }
+  return payload;
+}
+
+function renderErpTable() {
+  const thead = $('erpTable').querySelector('thead');
+  const tbody = $('erpTable').querySelector('tbody');
+  thead.innerHTML = '';
+  tbody.innerHTML = '';
+  const search = String($('erpSearch').value || '').trim().toLowerCase();
+  const statusFilter = String($('erpStatusFilter').value || '').trim();
+  const canEdit = !!(state.erpData && state.erpData.canEdit);
+  const { sheet } = currentErpSheet();
+  if (!sheet || !Array.isArray(sheet.columns)) {
+    renderEmptyRow(tbody, 1, 'ERP 시트 데이터가 없습니다.');
+    return;
+  }
+
+  const header = document.createElement('tr');
+  header.innerHTML = `${canEdit ? '<th><input id="erpSelectAll" class="chk" type="checkbox" /></th>' : ''}<th>No</th>${sheet.columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('')}<th>Updated</th>${canEdit ? '<th>Action</th>' : ''}`;
+  thead.appendChild(header);
+
+  const rows = (sheet.rows || []).filter((row) => {
+    if (statusFilter && String(row.status || '') !== statusFilter) {
+      return false;
+    }
+    if (!search) return true;
+    const joined = [row.no].concat(sheet.columns.map((column) => row[column.id] || '')).join(' ').toLowerCase();
+    return joined.includes(search);
+  });
+
+  if (!rows.length) {
+    renderEmptyRow(tbody, sheet.columns.length + (canEdit ? 4 : 2), 'ERP 데이터가 없습니다.');
+    return;
+  }
+
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    const cols = [];
+    if (canEdit) {
+      const checked = state.erpSelectedRowIds.has(String(row.id || '')) ? 'checked' : '';
+      cols.push(`<td><input class="chk erp-row-select" type="checkbox" data-row-id="${escapeHtml(row.id)}" ${checked} /></td>`);
+    }
+    cols.push(`<td>${row.no || '-'}</td>`);
+    for (const column of sheet.columns) {
+      const value = row[column.id] || '';
+      if (column.id === 'status') {
+        cols.push(`<td><span class="erp-status ${erpStatusClass(value)}">${escapeHtml(value || '-')}</span></td>`);
+      } else {
+        cols.push(`<td>${escapeHtml(value || '-')}</td>`);
+      }
+    }
+    cols.push(`<td>${fmt(row.updatedAt)}</td>`);
+    if (canEdit) {
+      cols.push(`<td><button class="btn btn-soft erp-edit" data-row-id="${escapeHtml(row.id)}">수정</button> <button class="btn btn-danger erp-delete" data-row-id="${escapeHtml(row.id)}">삭제</button></td>`);
+    }
+    tr.innerHTML = cols.join('');
+    tbody.appendChild(tr);
+  }
+
+  if (canEdit) {
+    const all = Array.from(document.querySelectorAll('.erp-row-select'));
+    const selected = all.filter((x) => x.checked).length;
+    const selectAll = $('erpSelectAll');
+    if (selectAll) {
+      selectAll.checked = all.length > 0 && selected === all.length;
+    }
+  }
+}
+
+function fillErpFormFromRow(row) {
+  const { sheet } = currentErpSheet();
+  if (!sheet) return;
+  for (const column of sheet.columns) {
+    const el = $(`erpField_${column.id}`);
+    if (el) {
+      el.value = String(row[column.id] || '');
+    }
+  }
+  state.erpEditingRowId = String(row.id || '');
+  $('erpFormTitle').textContent = `행 수정 #${row.no || '-'}`;
+}
+
+function renderErp() {
+  renderErpSheetSelect();
+  renderErpStatusFilter();
+  renderErpForm();
+  renderErpTable();
+  const canEdit = !!(state.erpData && state.erpData.canEdit);
+  $('erpSaveBtn').disabled = !canEdit;
+  $('erpSaveBtn').style.opacity = canEdit ? '1' : '0.5';
+  $('erpFormResult').textContent = canEdit ? '' : 'ERP 수정은 Operations 또는 Technical Lead 권한이 필요합니다.';
+  $('erpFormResult').style.color = canEdit ? '' : '#d13a49';
+  const { key } = currentErpSheet();
+  const summary = (state.erpData && state.erpData.summary && state.erpData.summary[key]) || {};
+  const statusCounts = summary.statusCounts || {};
+  const statusText = Object.entries(statusCounts).map(([k, v]) => `${k}:${v}`).join(' · ');
+  $('erpSummaryText').textContent = `총 ${summary.total || 0}건 · 삭제 ${summary.deleted || 0}건${statusText ? ` · ${statusText}` : ''}`;
+  const deletedRows = (state.erpData && state.erpData.deletedSheets && state.erpData.deletedSheets[key] && state.erpData.deletedSheets[key].rows) || [];
+  const deletedOptions = deletedRows.map((row) => ({
+    id: row.id,
+    name: `#${row.no || '-'} | ${fmt(row.deletedAt)}`
+  }));
+  fillMultiSelect($('erpDeletedRowsSelect'), deletedOptions, 'name', '삭제된 행 없음');
+  $('erpDeleteSelectedBtn').disabled = !canEdit;
+  $('erpRestoreSelectedBtn').disabled = !canEdit;
+}
+
+async function loadErpData() {
+  if (!hasDashboardAccess() || !state.guildId) {
+    return;
+  }
+  const data = await api(`/api/guilds/${state.guildId}/erp`);
+  state.erpData = data || { sheetOptions: [], sheets: {} };
+  state.erpSelectedRowIds = new Set(
+    Array.from(state.erpSelectedRowIds).filter((id) => {
+      const { key } = currentErpSheet();
+      const rows = (data && data.sheets && data.sheets[key] && data.sheets[key].rows) || [];
+      return rows.some((row) => String(row.id || '') === String(id));
+    })
+  );
+  renderErp();
+}
+
 async function loadGuilds() {
   const data = await api('/api/guilds');
   const guilds = data.guilds || [];
@@ -597,6 +841,9 @@ async function loadData() {
 
   renderOverviewTables();
   renderOperationsHistoryTable();
+  try {
+    await loadErpData();
+  } catch (_error) {}
   setLastSync();
 
   const available = data.channelStats && Number.isInteger(data.channelStats.availableTextChannels)
@@ -707,6 +954,17 @@ function parseTicketNoList(raw) {
     .filter((x) => Number.isInteger(x) && x > 0);
 }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
 $('saveToken').addEventListener('click', async () => {
   try {
     if (isOauthLoginRequired()) {
@@ -788,6 +1046,16 @@ $('opsTabBtn').addEventListener('click', () => {
   }
   switchTab('ops');
 });
+$('erpTabBtn').addEventListener('click', async () => {
+  if (!hasDashboardAccess()) {
+    setStatus('먼저 Discord 로그인 후 접근하세요.', 'error');
+    return;
+  }
+  switchTab('erp');
+  await loadErpData().catch((error) => {
+    setStatus(`ERP 로드 실패: ${error.message}`, 'error');
+  });
+});
 $('discordLoginBtn').addEventListener('click', () => {
   if (!state.oauthEnabled) {
     setStatus('Discord OAuth 미설정입니다. 먼저 Discord 로그인 페이지를 열고, Koyeb OAuth 환경변수를 설정해주세요.', 'error');
@@ -866,6 +1134,232 @@ $('historyClear').addEventListener('click', () => {
   $('historyType').value = 'all';
   $('historySearch').value = '';
   renderOverviewTables();
+});
+
+$('erpSheetSelect').addEventListener('change', () => {
+  state.erpSheet = $('erpSheetSelect').value || state.erpSheet;
+  localStorage.setItem('erp.sheet', state.erpSheet);
+  state.erpEditingRowId = '';
+  state.erpSelectedRowIds.clear();
+  renderErp();
+});
+
+$('erpSearch').addEventListener('input', renderErpTable);
+$('erpStatusFilter').addEventListener('change', renderErpTable);
+
+$('erpImportBtn').addEventListener('click', async () => {
+  $('erpImportResult').textContent = '가져오는 중...';
+  try {
+    if (!state.guildId) {
+      throw new Error('길드를 먼저 선택하세요.');
+    }
+    const { key } = currentErpSheet();
+    if (!key) {
+      throw new Error('ERP 시트를 선택하세요.');
+    }
+    const fileInput = $('erpImportFile');
+    const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    if (!file) {
+      throw new Error('파일을 선택하세요.');
+    }
+    const arrayBuffer = await file.arrayBuffer();
+    const fileBase64 = arrayBufferToBase64(arrayBuffer);
+    const replaceAll = !!$('erpImportReplaceAll').checked;
+    const result = await api(`/api/guilds/${state.guildId}/erp/${key}/import`, {
+      method: 'POST',
+      body: JSON.stringify({ fileBase64, replaceAll })
+    });
+    $('erpImportResult').textContent = `가져오기 완료: ${result.importedCount || 0}건 (총 ${result.totalCount || 0}건)`;
+    $('erpImportResult').style.color = '#128058';
+    fileInput.value = '';
+    $('erpImportReplaceAll').checked = false;
+    state.erpSelectedRowIds.clear();
+    clearErpForm();
+    await loadErpData();
+  } catch (error) {
+    $('erpImportResult').textContent = `가져오기 실패: ${error.message}`;
+    $('erpImportResult').style.color = '#d13a49';
+  }
+});
+
+$('erpReloadBtn').addEventListener('click', async () => {
+  try {
+    await loadErpData();
+    setStatus('ERP 데이터 새로고침 완료');
+  } catch (error) {
+    setStatus(`ERP 데이터 새로고침 실패: ${error.message}`, 'error');
+  }
+});
+
+$('erpExportBtn').addEventListener('click', async () => {
+  try {
+    if (!state.guildId) {
+      throw new Error('길드를 먼저 선택하세요.');
+    }
+    const url = `/api/guilds/${state.guildId}/erp/export.xlsx`;
+    const res = await fetch(url, {
+      credentials: 'same-origin',
+      headers: authHeaders()
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = `erp_${state.guildId}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+    setStatus('ERP Excel 다운로드 완료');
+  } catch (error) {
+    setStatus(`ERP Excel 다운로드 실패: ${error.message}`, 'error');
+  }
+});
+
+$('erpSaveBtn').addEventListener('click', async () => {
+  $('erpFormResult').textContent = '저장 중...';
+  try {
+    if (!state.guildId) {
+      throw new Error('길드를 먼저 선택하세요.');
+    }
+    const { key } = currentErpSheet();
+    if (!key) {
+      throw new Error('ERP 시트를 선택하세요.');
+    }
+    const payload = collectErpFormPayload();
+    let result;
+    if (state.erpEditingRowId) {
+      result = await api(`/api/guilds/${state.guildId}/erp/${key}/rows/${state.erpEditingRowId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+    } else {
+      result = await api(`/api/guilds/${state.guildId}/erp/${key}/rows`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    }
+    $('erpFormResult').textContent = `저장 완료 (No: ${result.row && result.row.no ? result.row.no : '-'})`;
+    $('erpFormResult').style.color = '#128058';
+    await loadErpData();
+    clearErpForm();
+  } catch (error) {
+    $('erpFormResult').textContent = `저장 실패: ${error.message}`;
+    $('erpFormResult').style.color = '#d13a49';
+  }
+});
+
+$('erpClearBtn').addEventListener('click', clearErpForm);
+
+$('erpTable').addEventListener('click', async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  const editBtn = target.closest('.erp-edit');
+  const delBtn = target.closest('.erp-delete');
+  const { key, sheet } = currentErpSheet();
+  if (!key || !sheet) {
+    return;
+  }
+  if (editBtn) {
+    const rowId = String(editBtn.dataset.rowId || '');
+    const row = (sheet.rows || []).find((item) => String(item.id || '') === rowId);
+    if (!row) {
+      return;
+    }
+    fillErpFormFromRow(row);
+    return;
+  }
+  if (delBtn) {
+    const rowId = String(delBtn.dataset.rowId || '');
+    if (!rowId) {
+      return;
+    }
+    if (!window.confirm('이 행을 삭제하시겠습니까?')) {
+      return;
+    }
+    try {
+      await api(`/api/guilds/${state.guildId}/erp/${key}/rows/${rowId}`, { method: 'DELETE' });
+      setStatus('ERP 행 삭제 완료');
+      clearErpForm();
+      await loadErpData();
+    } catch (error) {
+      setStatus(`ERP 행 삭제 실패: ${error.message}`, 'error');
+    }
+  }
+});
+
+$('erpTable').addEventListener('change', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  if (target.id === 'erpSelectAll') {
+    const checked = !!target.checked;
+    const rows = Array.from(document.querySelectorAll('.erp-row-select'));
+    for (const row of rows) {
+      row.checked = checked;
+      const rowId = String(row.dataset.rowId || '');
+      if (!rowId) continue;
+      if (checked) state.erpSelectedRowIds.add(rowId);
+      else state.erpSelectedRowIds.delete(rowId);
+    }
+    return;
+  }
+  if (target.classList.contains('erp-row-select')) {
+    const rowId = String(target.dataset.rowId || '');
+    if (!rowId) return;
+    if (target.checked) state.erpSelectedRowIds.add(rowId);
+    else state.erpSelectedRowIds.delete(rowId);
+    const all = Array.from(document.querySelectorAll('.erp-row-select'));
+    const selected = all.filter((x) => x.checked).length;
+    const selectAll = $('erpSelectAll');
+    if (selectAll) {
+      selectAll.checked = all.length > 0 && selected === all.length;
+    }
+  }
+});
+
+$('erpDeleteSelectedBtn').addEventListener('click', async () => {
+  try {
+    if (!state.guildId) throw new Error('길드를 먼저 선택하세요.');
+    const { key } = currentErpSheet();
+    const rowIds = Array.from(state.erpSelectedRowIds);
+    if (!key || rowIds.length === 0) throw new Error('삭제할 행을 선택하세요.');
+    if (!window.confirm(`선택한 ${rowIds.length}개 행을 삭제하시겠습니까?`)) return;
+    const result = await api(`/api/guilds/${state.guildId}/erp/${key}/rows/delete-many`, {
+      method: 'POST',
+      body: JSON.stringify({ rowIds })
+    });
+    state.erpSelectedRowIds.clear();
+    clearErpForm();
+    await loadErpData();
+    setStatus(`ERP ${result.removedCount || rowIds.length}개 행 삭제 완료`);
+  } catch (error) {
+    setStatus(`ERP 선택 삭제 실패: ${error.message}`, 'error');
+  }
+});
+
+$('erpRestoreSelectedBtn').addEventListener('click', async () => {
+  try {
+    if (!state.guildId) throw new Error('길드를 먼저 선택하세요.');
+    const { key } = currentErpSheet();
+    const rowIds = selectedValues($('erpDeletedRowsSelect'));
+    if (!key || rowIds.length === 0) throw new Error('복구할 삭제행을 선택하세요.');
+    const result = await api(`/api/guilds/${state.guildId}/erp/${key}/rows/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ rowIds })
+    });
+    await loadErpData();
+    setStatus(`ERP ${result.restoredCount || rowIds.length}개 행 복구 완료`);
+  } catch (error) {
+    setStatus(`ERP 복구 실패: ${error.message}`, 'error');
+  }
 });
 
 $('sendEmbed').addEventListener('click', async () => {
