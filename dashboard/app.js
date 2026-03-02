@@ -401,11 +401,15 @@ function buildHistoryRows(openTickets, closedTickets) {
   const openRows = (openTickets || []).map((t) => ({
     ...t,
     historyStatus: 'open',
+    openedAt: Number(t.createdAt) || 0,
+    closedAt: 0,
     historyTime: Number(t.createdAt) || 0
   }));
   const closedRows = (closedTickets || []).map((t) => ({
     ...t,
     historyStatus: 'closed',
+    openedAt: Number(t.createdAt) || 0,
+    closedAt: Number(t.closedAt) || 0,
     historyTime: Number(t.closedAt || t.createdAt) || 0
   }));
   return openRows.concat(closedRows).sort((a, b) => (b.historyTime || 0) - (a.historyTime || 0));
@@ -476,11 +480,11 @@ function renderOverviewTables() {
   }
 
   if (!filteredHistory.length) {
-    renderEmptyRow(closedBody, 7, '조건에 맞는 티켓 이력이 없습니다.');
+    renderEmptyRow(closedBody, 8, '조건에 맞는 티켓 이력이 없습니다.');
   } else {
     for (const t of filteredHistory) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${escapeHtml(t.ticketTypeLabel)}</td><td>${historyStatusChip(t.historyStatus)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.historyTime)}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.historyStatus === 'closed' ? (t.closeReason || '-') : '-')}</td>`;
+      tr.innerHTML = `<td>${t.ticketNo || '-'}</td><td>${escapeHtml(t.ticketTypeLabel)}</td><td>${historyStatusChip(t.historyStatus)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.openedAt)}</td><td>${t.historyStatus === 'closed' ? fmt(t.closedAt) : '-'}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.historyStatus === 'closed' ? (t.closeReason || '-') : '-')}</td>`;
       closedBody.appendChild(tr);
     }
   }
@@ -524,7 +528,7 @@ function renderOperationsHistoryTable() {
   );
 
   if (!historyRows.length) {
-    renderEmptyRow(tbody, 8, '기록된 티켓이 없습니다.');
+    renderEmptyRow(tbody, 9, '기록된 티켓이 없습니다.');
     $('opsSelectAll').checked = false;
     $('removeTicketNos').value = '';
     return;
@@ -534,7 +538,7 @@ function renderOperationsHistoryTable() {
     const ticketNo = Number.parseInt(t.ticketNo, 10);
     const checked = Number.isInteger(ticketNo) && state.selectedOpsTicketNos.has(ticketNo) ? 'checked' : '';
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input class="chk ops-ticket-select" type="checkbox" data-ticket-no="${ticketNo || ''}" ${checked} /></td><td>${t.ticketNo || '-'}</td><td>${escapeHtml(t.ticketTypeLabel)}</td><td>${historyStatusChip(t.historyStatus)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.historyTime)}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.historyStatus === 'closed' ? (t.closeReason || '-') : '-')}</td>`;
+    tr.innerHTML = `<td><input class="chk ops-ticket-select" type="checkbox" data-ticket-no="${ticketNo || ''}" ${checked} /></td><td>${t.ticketNo || '-'}</td><td>${escapeHtml(t.ticketTypeLabel)}</td><td>${historyStatusChip(t.historyStatus)}</td><td>${escapeHtml(t.ownerTag || t.ownerId)}</td><td>${fmt(t.openedAt)}</td><td>${t.historyStatus === 'closed' ? fmt(t.closedAt) : '-'}</td><td>${formatTicketDetails(t)}</td><td>${escapeHtml(t.historyStatus === 'closed' ? (t.closeReason || '-') : '-')}</td>`;
     tbody.appendChild(tr);
   }
 

@@ -68,9 +68,10 @@
     }
 
     .container {
+      width: min(1320px, calc(100vw - 32px));
       max-width: 1320px;
-      margin: 22px auto;
-      padding: 0 16px 26px;
+      margin: 22px auto 26px;
+      padding: 0;
       display: grid;
       gap: 14px;
     }
@@ -406,7 +407,11 @@
         flex-direction: column;
         align-items: flex-start;
       }
-      .container { padding: 0 10px 18px; margin-top: 12px; }
+      .container {
+        width: calc(100vw - 20px);
+        padding: 0 0 18px;
+        margin-top: 12px;
+      }
       .panel { padding: 12px; border-radius: 14px; }
       .brand { font-size: 17px; }
       .title { font-size: 18px; }
@@ -489,9 +494,10 @@
       #closedTable tbody td:nth-child(2)::before { content: 'Type'; }
       #closedTable tbody td:nth-child(3)::before { content: 'Status'; }
       #closedTable tbody td:nth-child(4)::before { content: 'Owner'; }
-      #closedTable tbody td:nth-child(5)::before { content: 'Time'; }
-      #closedTable tbody td:nth-child(6)::before { content: 'Details'; }
-      #closedTable tbody td:nth-child(7)::before { content: 'Reason'; }
+      #closedTable tbody td:nth-child(5)::before { content: 'Opened'; }
+      #closedTable tbody td:nth-child(6)::before { content: 'Closed'; }
+      #closedTable tbody td:nth-child(7)::before { content: 'Details'; }
+      #closedTable tbody td:nth-child(8)::before { content: 'Reason'; }
 
       #userRoleTable tbody td:nth-child(1)::before { content: 'User'; }
       #userRoleTable tbody td:nth-child(2)::before { content: 'Highest'; }
@@ -505,9 +511,10 @@
       #opsHistoryTable tbody td:nth-child(3)::before { content: 'Type'; }
       #opsHistoryTable tbody td:nth-child(4)::before { content: 'Status'; }
       #opsHistoryTable tbody td:nth-child(5)::before { content: 'Owner'; }
-      #opsHistoryTable tbody td:nth-child(6)::before { content: 'Time'; }
-      #opsHistoryTable tbody td:nth-child(7)::before { content: 'Details'; }
-      #opsHistoryTable tbody td:nth-child(8)::before { content: 'Reason'; }
+      #opsHistoryTable tbody td:nth-child(6)::before { content: 'Opened'; }
+      #opsHistoryTable tbody td:nth-child(7)::before { content: 'Closed'; }
+      #opsHistoryTable tbody td:nth-child(8)::before { content: 'Details'; }
+      #opsHistoryTable tbody td:nth-child(9)::before { content: 'Reason'; }
 
       #masterIssuerStatsTable tbody td:nth-child(1)::before { content: 'User'; }
       #masterIssuerStatsTable tbody td:nth-child(2)::before { content: 'Role'; }
@@ -661,7 +668,8 @@
                   <th>Type</th>
                   <th>Status</th>
                   <th>Owner</th>
-                  <th>Time</th>
+                  <th>Opened</th>
+                  <th>Closed</th>
                   <th>Details</th>
                   <th>Reason</th>
                 </tr>
@@ -702,7 +710,8 @@
                   <th>Type</th>
                   <th>Status</th>
                   <th>Owner</th>
-                  <th>Time</th>
+                  <th>Opened</th>
+                  <th>Closed</th>
                   <th>Details</th>
                   <th>Reason</th>
                 </tr>
