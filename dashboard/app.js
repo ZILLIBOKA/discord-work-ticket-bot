@@ -22,6 +22,7 @@ const state = {
     column: 'all',
     keyword: ''
   },
+  erpLastCheckedIndex: -1,
   erpSelectedRowIds: new Set(),
   activeTab: 'overview'
 };
@@ -604,10 +605,46 @@ function renderErpSheetSelect() {
 
 function openModal(id) {
   $(id).style.display = 'flex';
+  setTimeout(() => {
+    const root = $(id);
+    if (!root) return;
+    const target = root.querySelector('input:not([type="hidden"]), select, textarea, button');
+    if (target && typeof target.focus === 'function') {
+      target.focus();
+    }
+  }, 0);
 }
 
 function closeModal(id) {
   $(id).style.display = 'none';
+}
+
+function erpFilterStorageKey() {
+  return `erp.filters.${state.guildId || 'global'}.${state.erpSheet || 'work_list'}`;
+}
+
+function saveErpFilters() {
+  try {
+    localStorage.setItem(erpFilterStorageKey(), JSON.stringify(state.erpFilters || {}));
+  } catch (_error) {}
+}
+
+function loadErpFilters() {
+  try {
+    const raw = localStorage.getItem(erpFilterStorageKey());
+    if (!raw) {
+      state.erpFilters = { status: '', column: 'all', keyword: '' };
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    state.erpFilters = {
+      status: String(parsed && parsed.status ? parsed.status : ''),
+      column: String(parsed && parsed.column ? parsed.column : 'all'),
+      keyword: String(parsed && parsed.keyword ? parsed.keyword : '')
+    };
+  } catch (_error) {
+    state.erpFilters = { status: '', column: 'all', keyword: '' };
+  }
 }
 
 function renderErpFilterModalFields() {
@@ -760,13 +797,13 @@ function renderErpTable() {
     return;
   }
 
-  for (const row of rows) {
+  rows.forEach((row, rowIndex) => {
     const tr = document.createElement('tr');
     tr.dataset.rowId = String(row.id || '');
     const cols = [];
     if (canEdit) {
       const checked = state.erpSelectedRowIds.has(String(row.id || '')) ? 'checked' : '';
-      cols.push(`<td><input class="chk erp-row-select" type="checkbox" data-row-id="${escapeHtml(row.id)}" ${checked} /></td>`);
+      cols.push(`<td><input class="chk erp-row-select" type="checkbox" data-row-id="${escapeHtml(row.id)}" data-row-index="${rowIndex}" ${checked} /></td>`);
     }
     cols.push(`<td>${row.no || '-'}</td>`);
     for (const column of sheet.columns) {
@@ -783,7 +820,7 @@ function renderErpTable() {
     }
     tr.innerHTML = cols.join('');
     tbody.appendChild(tr);
-  }
+  });
 
   if (canEdit) {
     const all = Array.from(document.querySelectorAll('.erp-row-select'));
@@ -811,6 +848,7 @@ function fillErpFormFromRow(row) {
 
 function renderErp() {
   renderErpSheetSelect();
+  loadErpFilters();
   renderErpFilterModalFields();
   renderErpBulkEditModalFields();
   renderErpForm();
@@ -1220,7 +1258,7 @@ $('erpSheetSelect').addEventListener('change', () => {
   localStorage.setItem('erp.sheet', state.erpSheet);
   state.erpEditingRowId = '';
   state.erpSelectedRowIds.clear();
-  state.erpFilters = { status: '', column: 'all', keyword: '' };
+  loadErpFilters();
   renderErp();
   updateErpSelectionUi();
 });
@@ -1267,17 +1305,25 @@ $('erpFilterModal').addEventListener('click', (event) => {
     closeModal('erpFilterModal');
   }
 });
+$('erpFilterKeyword').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    $('erpApplyFilterBtn').click();
+  }
+});
 
 $('erpApplyFilterBtn').addEventListener('click', () => {
   state.erpFilters.status = String($('erpFilterStatus').value || '').trim();
   state.erpFilters.column = String($('erpFilterColumn').value || 'all').trim();
   state.erpFilters.keyword = String($('erpFilterKeyword').value || '').trim();
+  saveErpFilters();
   renderErp();
   closeModal('erpFilterModal');
 });
 
 $('erpClearFilterBtn').addEventListener('click', () => {
   state.erpFilters = { status: '', column: 'all', keyword: '' };
+  saveErpFilters();
   renderErp();
   closeModal('erpFilterModal');
 });
@@ -1367,6 +1413,23 @@ $('erpRestoreModalCloseBtn').addEventListener('click', () => closeModal('erpRest
 $('erpRestoreModal').addEventListener('click', (event) => {
   if (event.target === $('erpRestoreModal')) {
     closeModal('erpRestoreModal');
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  const modalOrder = ['erpModal', 'erpImportModal', 'erpFilterModal', 'erpBulkEditModal', 'erpRestoreModal', 'qrModal'];
+  const opened = modalOrder.find((id) => $(id) && $(id).style.display === 'flex');
+  if (!opened) {
+    return;
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeModal(opened);
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S') && opened === 'erpModal') {
+    event.preventDefault();
+    $('erpSaveBtn').click();
   }
 });
 
@@ -1484,6 +1547,62 @@ $('erpTable').addEventListener('click', async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) {
     return;
+  }
+  const checkbox = target.closest('.erp-row-select');
+  if (checkbox instanceof HTMLInputElement) {
+    const rowId = String(checkbox.dataset.rowId || '');
+    const rowIndex = Number.parseInt(String(checkbox.dataset.rowIndex || ''), 10);
+    if (rowId) {
+      if (checkbox.checked) state.erpSelectedRowIds.add(rowId);
+      else state.erpSelectedRowIds.delete(rowId);
+    }
+    if (event.shiftKey && Number.isInteger(rowIndex) && state.erpLastCheckedIndex >= 0) {
+      const min = Math.min(state.erpLastCheckedIndex, rowIndex);
+      const max = Math.max(state.erpLastCheckedIndex, rowIndex);
+      const all = Array.from(document.querySelectorAll('.erp-row-select'));
+      for (const item of all) {
+        const idx = Number.parseInt(String(item.dataset.rowIndex || ''), 10);
+        if (!Number.isInteger(idx) || idx < min || idx > max) continue;
+        item.checked = checkbox.checked;
+        const id = String(item.dataset.rowId || '');
+        if (!id) continue;
+        if (checkbox.checked) state.erpSelectedRowIds.add(id);
+        else state.erpSelectedRowIds.delete(id);
+      }
+    }
+    if (Number.isInteger(rowIndex)) {
+      state.erpLastCheckedIndex = rowIndex;
+    }
+    const all = Array.from(document.querySelectorAll('.erp-row-select'));
+    const selected = all.filter((x) => x.checked).length;
+    const selectAll = $('erpSelectAll');
+    if (selectAll) {
+      selectAll.checked = all.length > 0 && selected === all.length;
+    }
+    updateErpSelectionUi();
+    return;
+  }
+
+  const canEdit = !!(state.erpData && state.erpData.canEdit);
+  const rowEl = target.closest('tr');
+  if (canEdit && rowEl && target.closest('tbody') && !target.closest('button, a, input, select, textarea, label')) {
+    const rowId = String(rowEl.dataset.rowId || '');
+    if (rowId) {
+      const rowCheckbox = rowEl.querySelector('.erp-row-select');
+      if (rowCheckbox instanceof HTMLInputElement) {
+        rowCheckbox.checked = !rowCheckbox.checked;
+        if (rowCheckbox.checked) state.erpSelectedRowIds.add(rowId);
+        else state.erpSelectedRowIds.delete(rowId);
+        const all = Array.from(document.querySelectorAll('.erp-row-select'));
+        const selected = all.filter((x) => x.checked).length;
+        const selectAll = $('erpSelectAll');
+        if (selectAll) {
+          selectAll.checked = all.length > 0 && selected === all.length;
+        }
+        updateErpSelectionUi();
+        return;
+      }
+    }
   }
   const editBtn = target.closest('.erp-edit');
   const delBtn = target.closest('.erp-delete');
