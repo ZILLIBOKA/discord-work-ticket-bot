@@ -284,6 +284,10 @@
       gap: 8px;
       margin-top: 10px;
     }
+    .modal-grid {
+      display: grid;
+      gap: 10px;
+    }
     .erp-status {
       display: inline-block;
       padding: 3px 9px;
@@ -762,11 +766,10 @@
       <h2 class="title" style="font-size:18px; margin-bottom:10px;">ERP Workspace</h2>
       <div class="row">
         <select id="erpSheetSelect" class="select"></select>
-        <select id="erpStatusFilter" class="select">
-          <option value="">전체 상태</option>
-        </select>
-        <input id="erpSearch" class="field" placeholder="검색 (모든 컬럼 대상)" />
         <button id="erpReloadBtn" class="btn btn-soft">새로고침</button>
+        <button id="erpOpenFilterModal" class="btn btn-soft">필터 (팝업)</button>
+        <button id="erpOpenImportModal" class="btn btn-soft">파일 가져오기 (팝업)</button>
+        <button id="erpOpenBulkEditModal" class="btn btn-soft">선택 편집 (팝업)</button>
         <button id="erpExportBtn" class="btn btn-primary">Excel Export (.xlsx)</button>
       </div>
       <div class="row" style="margin-top:8px;">
@@ -774,17 +777,8 @@
         <label class="chip"><input id="erpQuickEditToggle" type="checkbox" style="margin-right:6px;" /> 빠른 수정 모드(더블클릭)</label>
       </div>
       <p class="fine" style="margin-top:6px;">수정 버튼 또는 더블클릭으로 수정할 수 있습니다.</p>
+      <p id="erpFilterSummaryText" class="fine" style="margin-top:6px;">필터: 없음</p>
       <p id="erpSummaryText" class="fine" style="margin-top:6px;">요약 없음</p>
-
-      <section class="panel" style="margin-top:12px;">
-        <h3 class="title" style="font-size:16px; margin-bottom:6px;">CSV/XLSX 가져오기</h3>
-        <div class="row">
-          <input id="erpImportFile" class="field" type="file" accept=".csv,.xlsx,.xls" />
-          <label class="chip"><input id="erpImportReplaceAll" type="checkbox" style="margin-right:6px;" /> 기존 데이터 전체 교체</label>
-          <button id="erpImportBtn" class="btn btn-primary">가져오기</button>
-        </div>
-        <p id="erpImportResult" class="result"></p>
-      </section>
 
       <div class="table-wrap" style="margin-top:12px;">
         <table id="erpTable">
@@ -794,8 +788,7 @@
       </div>
       <div class="row" style="margin-top:10px;">
         <button id="erpDeleteSelectedBtn" class="btn btn-danger">선택 행 삭제</button>
-        <select id="erpDeletedRowsSelect" class="select" multiple size="6"></select>
-        <button id="erpRestoreSelectedBtn" class="btn btn-soft">선택 삭제행 복구</button>
+        <button id="erpOpenRestoreModal" class="btn btn-soft">삭제행 복구 (팝업)</button>
       </div>
     </section>
 
@@ -912,6 +905,78 @@
         <button id="erpModalCloseBtn" class="btn btn-soft">닫기</button>
       </div>
       <p id="erpFormResult" class="result"></p>
+    </div>
+  </div>
+
+  <div id="erpImportModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpImportModalTitle">
+    <div class="modal-box" style="width:min(720px, 100%);">
+      <div class="title-row" style="margin-bottom:4px;">
+        <h3 id="erpImportModalTitle" class="title" style="font-size:18px;">CSV/XLSX 가져오기</h3>
+      </div>
+      <div class="modal-grid">
+        <input id="erpImportFile" class="field" type="file" accept=".csv,.xlsx,.xls" />
+        <label class="chip"><input id="erpImportReplaceAll" type="checkbox" style="margin-right:6px;" /> 기존 데이터 전체 교체</label>
+      </div>
+      <div class="erp-actions">
+        <button id="erpImportBtn" class="btn btn-primary">가져오기 실행</button>
+        <button id="erpImportModalCloseBtn" class="btn btn-soft">닫기</button>
+      </div>
+      <p id="erpImportResult" class="result"></p>
+    </div>
+  </div>
+
+  <div id="erpFilterModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpFilterModalTitle">
+    <div class="modal-box" style="width:min(760px, 100%);">
+      <div class="title-row" style="margin-bottom:4px;">
+        <h3 id="erpFilterModalTitle" class="title" style="font-size:18px;">ERP 필터</h3>
+      </div>
+      <div class="modal-grid">
+        <select id="erpFilterStatus" class="select">
+          <option value="">상태 전체</option>
+        </select>
+        <select id="erpFilterColumn" class="select">
+          <option value="all">모든 컬럼</option>
+        </select>
+        <input id="erpFilterKeyword" class="field" placeholder="포함 검색어 (contains)" />
+      </div>
+      <div class="erp-actions">
+        <button id="erpApplyFilterBtn" class="btn btn-primary">필터 적용</button>
+        <button id="erpClearFilterBtn" class="btn btn-soft">필터 초기화</button>
+        <button id="erpFilterModalCloseBtn" class="btn btn-soft">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="erpBulkEditModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpBulkEditModalTitle">
+    <div class="modal-box" style="width:min(760px, 100%);">
+      <div class="title-row" style="margin-bottom:4px;">
+        <h3 id="erpBulkEditModalTitle" class="title" style="font-size:18px;">선택 편집</h3>
+      </div>
+      <div class="modal-grid">
+        <select id="erpBulkEditColumn" class="select"></select>
+        <input id="erpBulkEditValue" class="field" placeholder="변경 값" />
+        <select id="erpBulkEditStatusValue" class="select" style="display:none;">
+          <option value="">상태 선택</option>
+        </select>
+      </div>
+      <div class="erp-actions">
+        <button id="erpRunBulkEditBtn" class="btn btn-primary">선택 행 일괄 수정</button>
+        <button id="erpBulkEditModalCloseBtn" class="btn btn-soft">닫기</button>
+      </div>
+      <p id="erpBulkEditResult" class="result"></p>
+    </div>
+  </div>
+
+  <div id="erpRestoreModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpRestoreModalTitle">
+    <div class="modal-box" style="width:min(760px, 100%);">
+      <div class="title-row" style="margin-bottom:4px;">
+        <h3 id="erpRestoreModalTitle" class="title" style="font-size:18px;">삭제행 복구</h3>
+      </div>
+      <select id="erpDeletedRowsSelect" class="select" multiple size="10"></select>
+      <div class="erp-actions">
+        <button id="erpRestoreSelectedBtn" class="btn btn-primary">선택 삭제행 복구</button>
+        <button id="erpRestoreModalCloseBtn" class="btn btn-soft">닫기</button>
+      </div>
     </div>
   </div>
 

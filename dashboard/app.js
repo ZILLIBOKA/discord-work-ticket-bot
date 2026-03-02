@@ -17,6 +17,11 @@ const state = {
   erpData: null,
   erpEditingRowId: '',
   erpSheet: localStorage.getItem('erp.sheet') || 'work_list',
+  erpFilters: {
+    status: '',
+    column: 'all',
+    keyword: ''
+  },
   erpSelectedRowIds: new Set(),
   activeTab: 'overview'
 };
@@ -597,26 +602,65 @@ function renderErpSheetSelect() {
   localStorage.setItem('erp.sheet', state.erpSheet);
 }
 
-function renderErpStatusFilter() {
+function openModal(id) {
+  $(id).style.display = 'flex';
+}
+
+function closeModal(id) {
+  $(id).style.display = 'none';
+}
+
+function renderErpFilterModalFields() {
   const { sheet } = currentErpSheet();
-  const select = $('erpStatusFilter');
-  const current = String(select.value || '');
-  select.innerHTML = '<option value="">전체 상태</option>';
+  const statusSelect = $('erpFilterStatus');
+  const colSelect = $('erpFilterColumn');
+  statusSelect.innerHTML = '<option value="">상태 전체</option>';
+  colSelect.innerHTML = '<option value="all">모든 컬럼</option>';
   const statusColumn = (sheet && sheet.columns || []).find((column) => column.id === 'status' && Array.isArray(column.options));
-  if (!statusColumn) {
-    select.disabled = true;
-    return;
+  if (statusColumn) {
+    for (const optionText of statusColumn.options) {
+      const opt = document.createElement('option');
+      opt.value = optionText;
+      opt.textContent = optionText;
+      statusSelect.appendChild(opt);
+    }
   }
-  select.disabled = false;
-  for (const optionText of statusColumn.options) {
+  for (const column of (sheet && sheet.columns) || []) {
     const opt = document.createElement('option');
-    opt.value = optionText;
-    opt.textContent = optionText;
-    select.appendChild(opt);
+    opt.value = column.id;
+    opt.textContent = column.label;
+    colSelect.appendChild(opt);
   }
-  if (current && Array.from(select.options).some((opt) => opt.value === current)) {
-    select.value = current;
+  statusSelect.value = state.erpFilters.status || '';
+  colSelect.value = state.erpFilters.column || 'all';
+  $('erpFilterKeyword').value = state.erpFilters.keyword || '';
+}
+
+function renderErpBulkEditModalFields() {
+  const { sheet } = currentErpSheet();
+  const colSelect = $('erpBulkEditColumn');
+  const statusValue = $('erpBulkEditStatusValue');
+  colSelect.innerHTML = '';
+  for (const column of (sheet && sheet.columns) || []) {
+    const opt = document.createElement('option');
+    opt.value = column.id;
+    opt.textContent = column.label;
+    colSelect.appendChild(opt);
   }
+  const statusColumn = (sheet && sheet.columns || []).find((column) => column.id === 'status' && Array.isArray(column.options));
+  statusValue.innerHTML = '<option value="">상태 선택</option>';
+  if (statusColumn) {
+    for (const optionText of statusColumn.options) {
+      const opt = document.createElement('option');
+      opt.value = optionText;
+      opt.textContent = optionText;
+      statusValue.appendChild(opt);
+    }
+  }
+  const selectedCol = String(colSelect.value || '');
+  const isStatus = selectedCol === 'status' && statusColumn;
+  statusValue.style.display = isStatus ? '' : 'none';
+  $('erpBulkEditValue').style.display = isStatus ? 'none' : '';
 }
 
 function clearErpForm() {
@@ -627,14 +671,6 @@ function clearErpForm() {
   for (const input of Array.from(document.querySelectorAll('#erpFormFields [data-erp-field]'))) {
     input.value = '';
   }
-}
-
-function openErpModal() {
-  $('erpModal').style.display = 'flex';
-}
-
-function closeErpModal() {
-  $('erpModal').style.display = 'none';
 }
 
 function renderErpForm() {
@@ -693,8 +729,9 @@ function renderErpTable() {
   const tbody = $('erpTable').querySelector('tbody');
   thead.innerHTML = '';
   tbody.innerHTML = '';
-  const search = String($('erpSearch').value || '').trim().toLowerCase();
-  const statusFilter = String($('erpStatusFilter').value || '').trim();
+  const search = String(state.erpFilters.keyword || '').trim().toLowerCase();
+  const statusFilter = String(state.erpFilters.status || '').trim();
+  const columnFilter = String(state.erpFilters.column || 'all').trim();
   const canEdit = !!(state.erpData && state.erpData.canEdit);
   const { sheet } = currentErpSheet();
   if (!sheet || !Array.isArray(sheet.columns)) {
@@ -711,6 +748,9 @@ function renderErpTable() {
       return false;
     }
     if (!search) return true;
+    if (columnFilter && columnFilter !== 'all') {
+      return String(row[columnFilter] || '').toLowerCase().includes(search);
+    }
     const joined = [row.no].concat(sheet.columns.map((column) => row[column.id] || '')).join(' ').toLowerCase();
     return joined.includes(search);
   });
@@ -766,12 +806,13 @@ function fillErpFormFromRow(row) {
   }
   state.erpEditingRowId = String(row.id || '');
   $('erpModalTitle').textContent = `ERP 행 수정 #${row.no || '-'}`;
-  openErpModal();
+  openModal('erpModal');
 }
 
 function renderErp() {
   renderErpSheetSelect();
-  renderErpStatusFilter();
+  renderErpFilterModalFields();
+  renderErpBulkEditModalFields();
   renderErpForm();
   renderErpTable();
   const canEdit = !!(state.erpData && state.erpData.canEdit);
@@ -784,6 +825,13 @@ function renderErp() {
   const statusCounts = summary.statusCounts || {};
   const statusText = Object.entries(statusCounts).map(([k, v]) => `${k}:${v}`).join(' · ');
   $('erpSummaryText').textContent = `총 ${summary.total || 0}건 · 삭제 ${summary.deleted || 0}건${statusText ? ` · ${statusText}` : ''}`;
+  const filterPieces = [];
+  if (state.erpFilters.status) filterPieces.push(`상태=${state.erpFilters.status}`);
+  if (state.erpFilters.keyword) {
+    const colText = state.erpFilters.column === 'all' ? '전체 컬럼' : state.erpFilters.column;
+    filterPieces.push(`${colText} 포함 "${state.erpFilters.keyword}"`);
+  }
+  $('erpFilterSummaryText').textContent = filterPieces.length ? `필터: ${filterPieces.join(' · ')}` : '필터: 없음';
   const deletedRows = (state.erpData && state.erpData.deletedSheets && state.erpData.deletedSheets[key] && state.erpData.deletedSheets[key].rows) || [];
   const deletedOptions = deletedRows.map((row) => ({
     id: row.id,
@@ -793,6 +841,8 @@ function renderErp() {
   $('erpDeleteSelectedBtn').disabled = !canEdit;
   $('erpRestoreSelectedBtn').disabled = !canEdit;
   $('erpOpenAddModal').disabled = !canEdit;
+  $('erpOpenImportModal').disabled = !canEdit;
+  $('erpOpenBulkEditModal').disabled = !canEdit;
 }
 
 async function loadErpData() {
@@ -1160,26 +1210,152 @@ $('erpSheetSelect').addEventListener('change', () => {
   localStorage.setItem('erp.sheet', state.erpSheet);
   state.erpEditingRowId = '';
   state.erpSelectedRowIds.clear();
+  state.erpFilters = { status: '', column: 'all', keyword: '' };
   renderErp();
 });
-
-$('erpSearch').addEventListener('input', renderErpTable);
-$('erpStatusFilter').addEventListener('change', renderErpTable);
 
 $('erpOpenAddModal').addEventListener('click', () => {
   clearErpForm();
   renderErpForm();
   $('erpModalTitle').textContent = 'ERP 행 추가';
-  openErpModal();
+  openModal('erpModal');
 });
 
 $('erpModalCloseBtn').addEventListener('click', () => {
-  closeErpModal();
+  closeModal('erpModal');
 });
 
 $('erpModal').addEventListener('click', (event) => {
   if (event.target === $('erpModal')) {
-    closeErpModal();
+    closeModal('erpModal');
+  }
+});
+
+$('erpOpenImportModal').addEventListener('click', () => {
+  $('erpImportResult').textContent = '';
+  $('erpImportFile').value = '';
+  $('erpImportReplaceAll').checked = false;
+  openModal('erpImportModal');
+});
+
+$('erpImportModalCloseBtn').addEventListener('click', () => closeModal('erpImportModal'));
+$('erpImportModal').addEventListener('click', (event) => {
+  if (event.target === $('erpImportModal')) {
+    closeModal('erpImportModal');
+  }
+});
+
+$('erpOpenFilterModal').addEventListener('click', () => {
+  renderErpFilterModalFields();
+  openModal('erpFilterModal');
+});
+
+$('erpFilterModalCloseBtn').addEventListener('click', () => closeModal('erpFilterModal'));
+$('erpFilterModal').addEventListener('click', (event) => {
+  if (event.target === $('erpFilterModal')) {
+    closeModal('erpFilterModal');
+  }
+});
+
+$('erpApplyFilterBtn').addEventListener('click', () => {
+  state.erpFilters.status = String($('erpFilterStatus').value || '').trim();
+  state.erpFilters.column = String($('erpFilterColumn').value || 'all').trim();
+  state.erpFilters.keyword = String($('erpFilterKeyword').value || '').trim();
+  renderErp();
+  closeModal('erpFilterModal');
+});
+
+$('erpClearFilterBtn').addEventListener('click', () => {
+  state.erpFilters = { status: '', column: 'all', keyword: '' };
+  renderErp();
+  closeModal('erpFilterModal');
+});
+
+$('erpOpenBulkEditModal').addEventListener('click', () => {
+  const canEdit = !!(state.erpData && state.erpData.canEdit);
+  if (!canEdit) {
+    setStatus('권한이 없습니다.', 'error');
+    return;
+  }
+  if (state.erpSelectedRowIds.size === 0) {
+    setStatus('먼저 행을 선택하세요.', 'error');
+    return;
+  }
+  renderErpBulkEditModalFields();
+  $('erpBulkEditResult').textContent = '';
+  $('erpBulkEditValue').value = '';
+  $('erpBulkEditStatusValue').value = '';
+  openModal('erpBulkEditModal');
+});
+
+$('erpBulkEditColumn').addEventListener('change', renderErpBulkEditModalFields);
+$('erpBulkEditModalCloseBtn').addEventListener('click', () => closeModal('erpBulkEditModal'));
+$('erpBulkEditModal').addEventListener('click', (event) => {
+  if (event.target === $('erpBulkEditModal')) {
+    closeModal('erpBulkEditModal');
+  }
+});
+
+$('erpRunBulkEditBtn').addEventListener('click', async () => {
+  $('erpBulkEditResult').textContent = '처리 중...';
+  try {
+    if (!state.guildId) {
+      throw new Error('길드를 먼저 선택하세요.');
+    }
+    const { key, sheet } = currentErpSheet();
+    const colId = String($('erpBulkEditColumn').value || '').trim();
+    if (!key || !colId || !sheet) {
+      throw new Error('컬럼을 선택하세요.');
+    }
+    const rowIds = Array.from(state.erpSelectedRowIds);
+    if (!rowIds.length) {
+      throw new Error('선택된 행이 없습니다.');
+    }
+    const targetCol = (sheet.columns || []).find((c) => c.id === colId);
+    if (!targetCol) {
+      throw new Error('유효하지 않은 컬럼입니다.');
+    }
+    const value = targetCol.id === 'status'
+      ? String($('erpBulkEditStatusValue').value || '').trim()
+      : String($('erpBulkEditValue').value || '').trim();
+    if (!value) {
+      throw new Error('변경 값을 입력하세요.');
+    }
+    const rowMap = new Map((sheet.rows || []).map((row) => [String(row.id || ''), row]));
+    let done = 0;
+    for (const rowId of rowIds) {
+      const row = rowMap.get(String(rowId));
+      if (!row) continue;
+      const payload = {};
+      for (const c of sheet.columns) {
+        payload[c.id] = String(row[c.id] || '');
+      }
+      payload[colId] = value;
+      // eslint-disable-next-line no-await-in-loop
+      await api(`/api/guilds/${state.guildId}/erp/${key}/rows/${rowId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      done += 1;
+    }
+    $('erpBulkEditResult').textContent = `완료: ${done}건 수정`;
+    $('erpBulkEditResult').style.color = '#128058';
+    await loadErpData();
+    closeModal('erpBulkEditModal');
+  } catch (error) {
+    $('erpBulkEditResult').textContent = `실패: ${error.message}`;
+    $('erpBulkEditResult').style.color = '#d13a49';
+  }
+});
+
+$('erpOpenRestoreModal').addEventListener('click', () => {
+  openModal('erpRestoreModal');
+});
+
+$('erpRestoreModalCloseBtn').addEventListener('click', () => closeModal('erpRestoreModal'));
+$('erpRestoreModal').addEventListener('click', (event) => {
+  if (event.target === $('erpRestoreModal')) {
+    closeModal('erpRestoreModal');
   }
 });
 
@@ -1212,6 +1388,7 @@ $('erpImportBtn').addEventListener('click', async () => {
     state.erpSelectedRowIds.clear();
     clearErpForm();
     await loadErpData();
+    closeModal('erpImportModal');
   } catch (error) {
     $('erpImportResult').textContent = `가져오기 실패: ${error.message}`;
     $('erpImportResult').style.color = '#d13a49';
@@ -1283,7 +1460,7 @@ $('erpSaveBtn').addEventListener('click', async () => {
     $('erpFormResult').style.color = '#128058';
     await loadErpData();
     clearErpForm();
-    closeErpModal();
+    closeModal('erpModal');
   } catch (error) {
     $('erpFormResult').textContent = `저장 실패: ${error.message}`;
     $('erpFormResult').style.color = '#d13a49';
@@ -1466,6 +1643,7 @@ $('erpRestoreSelectedBtn').addEventListener('click', async () => {
     });
     await loadErpData();
     setStatus(`ERP ${result.restoredCount || rowIds.length}개 행 복구 완료`);
+    closeModal('erpRestoreModal');
   } catch (error) {
     setStatus(`ERP 복구 실패: ${error.message}`, 'error');
   }
