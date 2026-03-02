@@ -288,6 +288,13 @@
       display: grid;
       gap: 10px;
     }
+    .sheet-embed {
+      width: 100%;
+      min-height: 420px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
     .erp-status {
       display: inline-block;
       padding: 3px 9px;
@@ -781,6 +788,12 @@
       <p id="erpFilterSummaryText" class="fine" style="margin-top:6px;">필터: 없음</p>
       <p id="erpSummaryText" class="fine" style="margin-top:6px;">요약 없음</p>
 
+      <section class="panel" style="margin-top:12px;">
+        <h3 class="title" style="font-size:16px; margin-bottom:6px;">Google Sheet View</h3>
+        <p id="erpSheetEmbedHint" class="fine" style="margin-bottom:8px;">Master에서 Google Sheet URL을 설정하면 여기에 표시됩니다.</p>
+        <iframe id="erpGoogleSheetFrame" class="sheet-embed" src="" title="Google Sheet Embed"></iframe>
+      </section>
+
       <div class="table-wrap" style="margin-top:12px;">
         <table id="erpTable">
           <thead></thead>
@@ -825,6 +838,15 @@
           <button id="masterRestoreDeletedTickets" class="btn btn-primary">선택 티켓 복구</button>
         </div>
         <p id="masterRestoreResult" class="result"></p>
+      </section>
+
+      <section class="panel" style="margin-bottom:12px;">
+        <h2 class="title" style="font-size:18px; margin-bottom:10px;">Google Sheet URL</h2>
+        <input id="masterGoogleSheetUrl" class="field" placeholder="https://docs.google.com/spreadsheets/d/.../edit#gid=0" />
+        <div class="row" style="margin-top:8px;">
+          <button id="masterSaveGoogleSheetBtn" class="btn btn-primary">URL 저장</button>
+        </div>
+        <p id="masterGoogleSheetResult" class="result"></p>
       </section>
 
       <p class="label" style="margin-top:12px;">Operations Permission</p>

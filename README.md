@@ -126,6 +126,7 @@ create table if not exists public.bot_state (
 - 삭제 티켓 복구 (Operations에서 제거한 티켓 복원)
 - 길드별 Operations 사용자/역할 추가/제거
 - ERP 변경 로그 조회 (누가/언제/어떤 항목을 바꿨는지)
+- Google Sheet URL 저장 (ERP 탭 내 임베드 뷰용)
 - Master 접근 조건
   1. Discord 로그인
   2. 로그인 계정이 해당 길드의 `Technical Lead` 역할 보유
@@ -136,6 +137,7 @@ create table if not exists public.bot_state (
   - `Asset List`
   - `Material Use`
 - 기능
+  - Google Sheet 임베드 뷰(설정된 URL이 있을 때)
   - 행 추가/수정: 팝업 모달 방식
   - 파일 가져오기: 팝업 모달 방식
   - 선택 편집(일괄 수정): 팝업 모달 방식

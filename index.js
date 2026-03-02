@@ -326,7 +326,8 @@ function ensureGuild(guildId) {
       },
       dashboard: {
         operatorUserIds: [],
-        operatorRoleIds: []
+        operatorRoleIds: [],
+        googleSheetEmbedUrl: ''
       },
       erp: {
         work_list: [],
@@ -384,6 +385,7 @@ function ensureGuild(guildId) {
   guildState.dashboard.operatorRoleIds = Array.isArray(guildState.dashboard.operatorRoleIds)
     ? guildState.dashboard.operatorRoleIds.filter(Boolean).map((v) => String(v))
     : [];
+  guildState.dashboard.googleSheetEmbedUrl = String(guildState.dashboard.googleSheetEmbedUrl || '').trim();
   guildState.erp = guildState.erp || {};
   guildState.erp.work_list = Array.isArray(guildState.erp.work_list) ? guildState.erp.work_list : [];
   guildState.erp.asset_list = Array.isArray(guildState.erp.asset_list) ? guildState.erp.asset_list : [];
@@ -1498,6 +1500,27 @@ function sanitizeIdList(values) {
   return Array.from(new Set(values.map((x) => String(x || '').trim()).filter(Boolean)));
 }
 
+function normalizeGoogleSheetEmbedUrl(raw) {
+  const input = String(raw || '').trim();
+  if (!input) return '';
+  try {
+    const url = new URL(input);
+    if (!/google\.com$/i.test(url.hostname)) {
+      return input;
+    }
+    const match = url.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match || !match[1]) {
+      return input;
+    }
+    const sheetId = match[1];
+    const gid = url.searchParams.get('gid');
+    const base = `https://docs.google.com/spreadsheets/d/${sheetId}/pubhtml`;
+    return gid ? `${base}?gid=${encodeURIComponent(gid)}&single=true` : base;
+  } catch (_error) {
+    return input;
+  }
+}
+
 function appendErpAudit(guildState, payload) {
   if (!guildState || !guildState.erp) {
     return;
@@ -1923,7 +1946,8 @@ function startDashboardServer() {
       settings: {
         supportRoleId: guildState.tickets.supportRoleId || '',
         technicianRoleId: guildState.tickets.technicianRoleId || '',
-        engineerRoleId: guildState.tickets.engineerRoleId || ''
+        engineerRoleId: guildState.tickets.engineerRoleId || '',
+        googleSheetEmbedUrl: guildState.dashboard.googleSheetEmbedUrl || ''
       },
       managerUsers,
       managerRoles,
@@ -1952,6 +1976,9 @@ function startDashboardServer() {
       auth: {
         user: authUser,
         permissions: authUserPermissions
+      },
+      dashboard: {
+        googleSheetEmbedUrl: guildState.dashboard.googleSheetEmbedUrl || ''
       }
     });
   });
@@ -2683,6 +2710,18 @@ function startDashboardServer() {
     guildState.dashboard.operatorRoleIds = Array.from(set);
     saveDb();
     return res.json({ ok: true, operatorRoleIds: guildState.dashboard.operatorRoleIds });
+  });
+
+  app.post('/api/master/guilds/:guildId/google-sheet', requireMasterDashboardToken, async (req, res) => {
+    const guild = client.guilds.cache.get(String(req.params.guildId || ''));
+    if (!guild) {
+      return res.status(404).json({ error: 'Guild not found' });
+    }
+    const guildState = ensureGuild(guild.id);
+    const rawUrl = String(req.body && req.body.url ? req.body.url : '').trim();
+    guildState.dashboard.googleSheetEmbedUrl = normalizeGoogleSheetEmbedUrl(rawUrl);
+    saveDb();
+    return res.json({ ok: true, googleSheetEmbedUrl: guildState.dashboard.googleSheetEmbedUrl || '' });
   });
 
   app.post('/api/guilds/:guildId/manager-users', requireDashboardAccess, async (req, res) => {

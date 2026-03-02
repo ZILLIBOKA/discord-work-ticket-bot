@@ -43,6 +43,20 @@ function setLastSync() {
   $('lastSync').textContent = `마지막 동기화: ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
+function renderGoogleSheetEmbed() {
+  const url = String((state.data && state.data.dashboard && state.data.dashboard.googleSheetEmbedUrl) || '').trim();
+  const frame = $('erpGoogleSheetFrame');
+  if (!url) {
+    frame.src = 'about:blank';
+    frame.style.display = 'none';
+    $('erpSheetEmbedHint').textContent = 'Master에서 Google Sheet URL을 설정하면 여기에 표시됩니다.';
+    return;
+  }
+  frame.style.display = '';
+  frame.src = url;
+  $('erpSheetEmbedHint').textContent = `현재 임베드 URL: ${url}`;
+}
+
 function stopQrPolling() {
   if (state.qrPollingTimer) {
     clearInterval(state.qrPollingTimer);
@@ -1019,6 +1033,7 @@ async function loadData() {
 
   renderOverviewTables();
   renderOperationsHistoryTable();
+  renderGoogleSheetEmbed();
   try {
     await loadErpData();
   } catch (_error) {}
@@ -1075,6 +1090,7 @@ async function loadMasterData() {
   $('masterSummary').textContent = `Bot: ${botTag} | Guilds: ${guildCount} | Open: ${totalOpen} | Closed: ${totalClosed} | Mode: Operations Permission`;
   fillMasterGuildSelect();
   await loadMasterActors();
+  await syncMasterGoogleSheetInput();
   await loadMasterErpAudit().catch(() => {});
 }
 
@@ -1124,6 +1140,25 @@ async function refreshMasterActors(guildId) {
   state.masterActorsByGuild[guildId] = null;
   await loadMasterActors();
   await loadMasterData();
+}
+
+async function syncMasterGoogleSheetInput() {
+  const targetGuildId = String($('masterOperatorGuild').value || '').trim();
+  if (!targetGuildId) {
+    $('masterGoogleSheetUrl').value = '';
+    return;
+  }
+  try {
+    if (state.guildId !== targetGuildId) {
+      $('guild').value = targetGuildId;
+      state.guildId = targetGuildId;
+      await loadData();
+    } else if (!state.data) {
+      await loadData();
+    }
+  } catch (_error) {}
+  const currentUrl = String((state.data && state.data.dashboard && state.data.dashboard.googleSheetEmbedUrl) || '').trim();
+  $('masterGoogleSheetUrl').value = currentUrl;
 }
 
 async function loadMasterErpAudit() {
@@ -1983,6 +2018,7 @@ $('masterOperatorGuild').addEventListener('change', async () => {
       await loadData();
     }
     await loadMasterActors();
+    await syncMasterGoogleSheetInput();
     await loadMasterErpAudit();
   } catch (error) {
     setStatus(`운영 권한 대상 로드 실패: ${error.message}`, 'error');
@@ -2088,6 +2124,29 @@ $('masterLoadErpAuditBtn').addEventListener('click', async () => {
     setStatus('ERP 변경 로그 조회 완료');
   } catch (error) {
     setStatus(`ERP 변경 로그 조회 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterSaveGoogleSheetBtn').addEventListener('click', async () => {
+  try {
+    const guildId = String($('masterOperatorGuild').value || '').trim();
+    if (!guildId) throw new Error('길드를 먼저 선택하세요.');
+    const url = String($('masterGoogleSheetUrl').value || '').trim();
+    const result = await apiMaster(`/api/master/guilds/${guildId}/google-sheet`, {
+      method: 'POST',
+      body: JSON.stringify({ url })
+    });
+    $('masterGoogleSheetResult').textContent = '저장 완료';
+    $('masterGoogleSheetResult').style.color = '#128058';
+    if (state.guildId === guildId) {
+      if (!state.data) state.data = {};
+      if (!state.data.dashboard) state.data.dashboard = {};
+      state.data.dashboard.googleSheetEmbedUrl = String(result.googleSheetEmbedUrl || '');
+      renderGoogleSheetEmbed();
+    }
+  } catch (error) {
+    $('masterGoogleSheetResult').textContent = `저장 실패: ${error.message}`;
+    $('masterGoogleSheetResult').style.color = '#d13a49';
   }
 });
 
