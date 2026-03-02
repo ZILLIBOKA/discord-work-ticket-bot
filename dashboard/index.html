@@ -487,10 +487,11 @@
 
       #closedTable tbody td:nth-child(1)::before { content: 'No'; }
       #closedTable tbody td:nth-child(2)::before { content: 'Type'; }
-      #closedTable tbody td:nth-child(3)::before { content: 'Owner'; }
-      #closedTable tbody td:nth-child(4)::before { content: 'Closed'; }
-      #closedTable tbody td:nth-child(5)::before { content: 'Details'; }
-      #closedTable tbody td:nth-child(6)::before { content: 'Reason'; }
+      #closedTable tbody td:nth-child(3)::before { content: 'Status'; }
+      #closedTable tbody td:nth-child(4)::before { content: 'Owner'; }
+      #closedTable tbody td:nth-child(5)::before { content: 'Time'; }
+      #closedTable tbody td:nth-child(6)::before { content: 'Details'; }
+      #closedTable tbody td:nth-child(7)::before { content: 'Reason'; }
 
       #userRoleTable tbody td:nth-child(1)::before { content: 'User'; }
       #userRoleTable tbody td:nth-child(2)::before { content: 'Highest'; }
@@ -502,10 +503,11 @@
       #opsHistoryTable tbody td:nth-child(1)::before { content: 'Select'; }
       #opsHistoryTable tbody td:nth-child(2)::before { content: 'No'; }
       #opsHistoryTable tbody td:nth-child(3)::before { content: 'Type'; }
-      #opsHistoryTable tbody td:nth-child(4)::before { content: 'Owner'; }
-      #opsHistoryTable tbody td:nth-child(5)::before { content: 'Closed'; }
-      #opsHistoryTable tbody td:nth-child(6)::before { content: 'Details'; }
-      #opsHistoryTable tbody td:nth-child(7)::before { content: 'Reason'; }
+      #opsHistoryTable tbody td:nth-child(4)::before { content: 'Status'; }
+      #opsHistoryTable tbody td:nth-child(5)::before { content: 'Owner'; }
+      #opsHistoryTable tbody td:nth-child(6)::before { content: 'Time'; }
+      #opsHistoryTable tbody td:nth-child(7)::before { content: 'Details'; }
+      #opsHistoryTable tbody td:nth-child(8)::before { content: 'Reason'; }
 
       #masterIssuerStatsTable tbody td:nth-child(1)::before { content: 'User'; }
       #masterIssuerStatsTable tbody td:nth-child(2)::before { content: 'Role'; }
@@ -657,8 +659,9 @@
                 <tr>
                   <th>No</th>
                   <th>Type</th>
+                  <th>Status</th>
                   <th>Owner</th>
-                  <th>Closed</th>
+                  <th>Time</th>
                   <th>Details</th>
                   <th>Reason</th>
                 </tr>
@@ -697,8 +700,9 @@
                   <th><input id="opsSelectAll" class="chk" type="checkbox" /></th>
                   <th>No</th>
                   <th>Type</th>
+                  <th>Status</th>
                   <th>Owner</th>
-                  <th>Closed</th>
+                  <th>Time</th>
                   <th>Details</th>
                   <th>Reason</th>
                 </tr>
