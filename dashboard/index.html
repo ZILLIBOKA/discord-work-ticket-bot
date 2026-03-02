@@ -769,7 +769,11 @@
         <button id="erpReloadBtn" class="btn btn-soft">새로고침</button>
         <button id="erpExportBtn" class="btn btn-primary">Excel Export (.xlsx)</button>
       </div>
-      <p class="fine" style="margin-top:8px;">행을 선택하면 수정 모드로 전환됩니다.</p>
+      <div class="row" style="margin-top:8px;">
+        <button id="erpOpenAddModal" class="btn btn-primary">행 추가 (팝업)</button>
+        <label class="chip"><input id="erpQuickEditToggle" type="checkbox" style="margin-right:6px;" /> 빠른 수정 모드(더블클릭)</label>
+      </div>
+      <p class="fine" style="margin-top:6px;">수정 버튼 또는 더블클릭으로 수정할 수 있습니다.</p>
       <p id="erpSummaryText" class="fine" style="margin-top:6px;">요약 없음</p>
 
       <section class="panel" style="margin-top:12px;">
@@ -780,16 +784,6 @@
           <button id="erpImportBtn" class="btn btn-primary">가져오기</button>
         </div>
         <p id="erpImportResult" class="result"></p>
-      </section>
-
-      <section class="panel" style="margin-top:12px;">
-        <h3 id="erpFormTitle" class="title" style="font-size:16px; margin-bottom:4px;">행 추가</h3>
-        <div id="erpFormFields" class="erp-form-grid"></div>
-        <div class="erp-actions">
-          <button id="erpSaveBtn" class="btn btn-primary">저장</button>
-          <button id="erpClearBtn" class="btn btn-soft">입력 초기화</button>
-        </div>
-        <p id="erpFormResult" class="result"></p>
       </section>
 
       <div class="table-wrap" style="margin-top:12px;">
@@ -903,6 +897,21 @@
         <a id="discordQrOpenLink" class="btn btn-soft" target="_blank" rel="noopener noreferrer">브라우저에서 열기</a>
         <button id="discordQrCloseBtn" class="btn btn-primary">닫기</button>
       </div>
+    </div>
+  </div>
+
+  <div id="erpModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="erpModalTitle">
+    <div class="modal-box" style="width:min(860px, 100%);">
+      <div class="title-row" style="margin-bottom:4px;">
+        <h3 id="erpModalTitle" class="title" style="font-size:18px;">ERP Row</h3>
+      </div>
+      <div id="erpFormFields" class="erp-form-grid"></div>
+      <div class="erp-actions">
+        <button id="erpSaveBtn" class="btn btn-primary">저장</button>
+        <button id="erpClearBtn" class="btn btn-soft">입력 초기화</button>
+        <button id="erpModalCloseBtn" class="btn btn-soft">닫기</button>
+      </div>
+      <p id="erpFormResult" class="result"></p>
     </div>
   </div>
 

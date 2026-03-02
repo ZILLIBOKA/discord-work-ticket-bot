@@ -135,7 +135,9 @@ create table if not exists public.bot_state (
   - `Asset List`
   - `Material Use`
 - 기능
-  - 행 추가/수정/삭제
+  - 행 추가/수정: 팝업 모달 방식
+  - 빠른 수정 모드(테이블 셀 더블클릭)
+  - 행 삭제
   - 다중 선택 삭제
   - 삭제행 복구(휴지통)
   - CSV/XLSX 대량 업로드(append 또는 전체 교체)

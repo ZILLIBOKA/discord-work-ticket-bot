@@ -579,6 +579,14 @@ function currentErpSheet() {
   return { key: firstKey, sheet: firstKey ? sheets[firstKey] : null };
 }
 
+function findErpRowById(rowId) {
+  const { sheet } = currentErpSheet();
+  if (!sheet || !Array.isArray(sheet.rows)) {
+    return null;
+  }
+  return sheet.rows.find((row) => String(row.id || '') === String(rowId || '')) || null;
+}
+
 function renderErpSheetSelect() {
   const options = ((state.erpData && state.erpData.sheetOptions) || []).map((x) => ({
     id: x.id,
@@ -613,12 +621,20 @@ function renderErpStatusFilter() {
 
 function clearErpForm() {
   state.erpEditingRowId = '';
-  $('erpFormTitle').textContent = '행 추가';
+  $('erpModalTitle').textContent = 'ERP 행 추가';
   $('erpFormResult').textContent = '';
   $('erpFormResult').style.color = '';
   for (const input of Array.from(document.querySelectorAll('#erpFormFields [data-erp-field]'))) {
     input.value = '';
   }
+}
+
+function openErpModal() {
+  $('erpModal').style.display = 'flex';
+}
+
+function closeErpModal() {
+  $('erpModal').style.display = 'none';
 }
 
 function renderErpForm() {
@@ -706,6 +722,7 @@ function renderErpTable() {
 
   for (const row of rows) {
     const tr = document.createElement('tr');
+    tr.dataset.rowId = String(row.id || '');
     const cols = [];
     if (canEdit) {
       const checked = state.erpSelectedRowIds.has(String(row.id || '')) ? 'checked' : '';
@@ -715,9 +732,9 @@ function renderErpTable() {
     for (const column of sheet.columns) {
       const value = row[column.id] || '';
       if (column.id === 'status') {
-        cols.push(`<td><span class="erp-status ${erpStatusClass(value)}">${escapeHtml(value || '-')}</span></td>`);
+        cols.push(`<td class="erp-cell" data-col-id="${escapeHtml(column.id)}"><span class="erp-status ${erpStatusClass(value)}">${escapeHtml(value || '-')}</span></td>`);
       } else {
-        cols.push(`<td>${escapeHtml(value || '-')}</td>`);
+        cols.push(`<td class="erp-cell" data-col-id="${escapeHtml(column.id)}">${escapeHtml(value || '-')}</td>`);
       }
     }
     cols.push(`<td>${fmt(row.updatedAt)}</td>`);
@@ -748,7 +765,8 @@ function fillErpFormFromRow(row) {
     }
   }
   state.erpEditingRowId = String(row.id || '');
-  $('erpFormTitle').textContent = `행 수정 #${row.no || '-'}`;
+  $('erpModalTitle').textContent = `ERP 행 수정 #${row.no || '-'}`;
+  openErpModal();
 }
 
 function renderErp() {
@@ -774,6 +792,7 @@ function renderErp() {
   fillMultiSelect($('erpDeletedRowsSelect'), deletedOptions, 'name', '삭제된 행 없음');
   $('erpDeleteSelectedBtn').disabled = !canEdit;
   $('erpRestoreSelectedBtn').disabled = !canEdit;
+  $('erpOpenAddModal').disabled = !canEdit;
 }
 
 async function loadErpData() {
@@ -1147,6 +1166,23 @@ $('erpSheetSelect').addEventListener('change', () => {
 $('erpSearch').addEventListener('input', renderErpTable);
 $('erpStatusFilter').addEventListener('change', renderErpTable);
 
+$('erpOpenAddModal').addEventListener('click', () => {
+  clearErpForm();
+  renderErpForm();
+  $('erpModalTitle').textContent = 'ERP 행 추가';
+  openErpModal();
+});
+
+$('erpModalCloseBtn').addEventListener('click', () => {
+  closeErpModal();
+});
+
+$('erpModal').addEventListener('click', (event) => {
+  if (event.target === $('erpModal')) {
+    closeErpModal();
+  }
+});
+
 $('erpImportBtn').addEventListener('click', async () => {
   $('erpImportResult').textContent = '가져오는 중...';
   try {
@@ -1247,6 +1283,7 @@ $('erpSaveBtn').addEventListener('click', async () => {
     $('erpFormResult').style.color = '#128058';
     await loadErpData();
     clearErpForm();
+    closeErpModal();
   } catch (error) {
     $('erpFormResult').textContent = `저장 실패: ${error.message}`;
     $('erpFormResult').style.color = '#d13a49';
@@ -1291,6 +1328,78 @@ $('erpTable').addEventListener('click', async (event) => {
     } catch (error) {
       setStatus(`ERP 행 삭제 실패: ${error.message}`, 'error');
     }
+  }
+});
+
+$('erpTable').addEventListener('dblclick', async (event) => {
+  try {
+    if (!$('erpQuickEditToggle').checked) {
+      return;
+    }
+    const canEdit = !!(state.erpData && state.erpData.canEdit);
+    if (!canEdit) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    const cell = target.closest('.erp-cell');
+    if (!cell) {
+      return;
+    }
+    const tr = cell.closest('tr');
+    const rowId = tr ? String(tr.dataset.rowId || '') : '';
+    const colId = String(cell.dataset.colId || '');
+    if (!rowId || !colId) {
+      return;
+    }
+    const row = findErpRowById(rowId);
+    if (!row) {
+      return;
+    }
+    const { key, sheet } = currentErpSheet();
+    const column = (sheet && sheet.columns || []).find((c) => c.id === colId);
+    if (!column) {
+      return;
+    }
+    const currentValue = String(row[colId] || '');
+    let nextValue = currentValue;
+    if (column.type === 'select' && Array.isArray(column.options)) {
+      const guide = `${column.options.join(', ')}`;
+      const input = window.prompt(`${column.label} 값을 입력하세요.\n가능한 값: ${guide}`, currentValue);
+      if (input === null) {
+        return;
+      }
+      const found = column.options.find((opt) => String(opt).toLowerCase() === String(input).trim().toLowerCase());
+      if (!found) {
+        alert(`유효하지 않은 값입니다.\n가능한 값: ${guide}`);
+        return;
+      }
+      nextValue = found;
+    } else {
+      const input = window.prompt(`${column.label} 값을 입력하세요.`, currentValue);
+      if (input === null) {
+        return;
+      }
+      nextValue = String(input).trim();
+    }
+    if (nextValue === currentValue) {
+      return;
+    }
+    const payload = {};
+    for (const c of sheet.columns) {
+      payload[c.id] = String(row[c.id] || '');
+    }
+    payload[colId] = nextValue;
+    await api(`/api/guilds/${state.guildId}/erp/${key}/rows/${rowId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+    await loadErpData();
+    setStatus('빠른 수정 완료');
+  } catch (error) {
+    setStatus(`빠른 수정 실패: ${error.message}`, 'error');
   }
 });
 
