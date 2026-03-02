@@ -391,6 +391,22 @@ function renderMasterDeletedTickets(items) {
   fillMultiSelect($('masterDeletedTicketMulti'), options, 'name', '복구 가능한 삭제 티켓 없음');
 }
 
+function renderMasterErpAuditRows(rows) {
+  const tbody = $('masterErpAuditTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) {
+    renderEmptyRow(tbody, 6, 'ERP 변경 로그가 없습니다.');
+    return;
+  }
+  for (const row of list) {
+    const detailText = escapeHtml(JSON.stringify(row.detail || {}));
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${fmt(row.at)}</td><td>${escapeHtml(row.sheetKey || '-')}</td><td>${row.rowNo || '-'}</td><td>${escapeHtml(row.action || '-')}</td><td>${escapeHtml(row.actorName || row.actorUserId || '-')}<br><span class="fine">${escapeHtml(row.actorUserId || '')}</span></td><td><code>${detailText}</code></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
 function renderEmptyRow(tbody, colCount, text) {
   const tr = document.createElement('tr');
   tr.innerHTML = `<td colspan="${colCount}" class="muted-cell">${text}</td>`;
@@ -1014,6 +1030,7 @@ async function loadMasterData() {
   $('masterSummary').textContent = `Bot: ${botTag} | Guilds: ${guildCount} | Open: ${totalOpen} | Closed: ${totalClosed} | Mode: Operations Permission`;
   fillMasterGuildSelect();
   await loadMasterActors();
+  await loadMasterErpAudit().catch(() => {});
 }
 
 async function loadMasterActors() {
@@ -1062,6 +1079,24 @@ async function refreshMasterActors(guildId) {
   state.masterActorsByGuild[guildId] = null;
   await loadMasterActors();
   await loadMasterData();
+}
+
+async function loadMasterErpAudit() {
+  const guildId = String($('masterOperatorGuild').value || '').trim();
+  if (!guildId) {
+    renderMasterErpAuditRows([]);
+    return;
+  }
+  const params = new URLSearchParams();
+  const sheetKey = String($('masterErpAuditSheet').value || '').trim();
+  const rowNo = String($('masterErpAuditRowNo').value || '').trim();
+  const keyword = String($('masterErpAuditKeyword').value || '').trim();
+  if (sheetKey) params.set('sheetKey', sheetKey);
+  if (rowNo) params.set('rowNo', rowNo);
+  if (keyword) params.set('keyword', keyword);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const data = await apiMaster(`/api/master/guilds/${guildId}/erp-audit${query}`);
+  renderMasterErpAuditRows(data.rows || []);
 }
 
 function parseTicketNoList(raw) {
@@ -1903,6 +1938,7 @@ $('masterOperatorGuild').addEventListener('change', async () => {
       await loadData();
     }
     await loadMasterActors();
+    await loadMasterErpAudit();
   } catch (error) {
     setStatus(`운영 권한 대상 로드 실패: ${error.message}`, 'error');
   }
@@ -1998,6 +2034,33 @@ $('masterRestoreDeletedTickets').addEventListener('click', async () => {
   } catch (error) {
     $('masterRestoreResult').textContent = `복구 실패: ${error.message}`;
     $('masterRestoreResult').style.color = '#d13a49';
+  }
+});
+
+$('masterLoadErpAuditBtn').addEventListener('click', async () => {
+  try {
+    await loadMasterErpAudit();
+    setStatus('ERP 변경 로그 조회 완료');
+  } catch (error) {
+    setStatus(`ERP 변경 로그 조회 실패: ${error.message}`, 'error');
+  }
+});
+
+$('masterErpAuditSheet').addEventListener('change', () => {
+  loadMasterErpAudit().catch(() => {});
+});
+
+$('masterErpAuditRowNo').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    $('masterLoadErpAuditBtn').click();
+  }
+});
+
+$('masterErpAuditKeyword').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    $('masterLoadErpAuditBtn').click();
   }
 });
 

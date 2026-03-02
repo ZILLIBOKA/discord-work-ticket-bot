@@ -125,6 +125,7 @@ create table if not exists public.bot_state (
 - 임베드 공지 전송
 - 삭제 티켓 복구 (Operations에서 제거한 티켓 복원)
 - 길드별 Operations 사용자/역할 추가/제거
+- ERP 변경 로그 조회 (누가/언제/어떤 항목을 바꿨는지)
 - Master 접근 조건
   1. Discord 로그인
   2. 로그인 계정이 해당 길드의 `Technical Lead` 역할 보유

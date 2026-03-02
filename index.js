@@ -332,6 +332,7 @@ function ensureGuild(guildId) {
         work_list: [],
         asset_list: [],
         material_use: [],
+        auditLogs: [],
         deletedRows: {
           work_list: [],
           asset_list: [],
@@ -387,6 +388,7 @@ function ensureGuild(guildId) {
   guildState.erp.work_list = Array.isArray(guildState.erp.work_list) ? guildState.erp.work_list : [];
   guildState.erp.asset_list = Array.isArray(guildState.erp.asset_list) ? guildState.erp.asset_list : [];
   guildState.erp.material_use = Array.isArray(guildState.erp.material_use) ? guildState.erp.material_use : [];
+  guildState.erp.auditLogs = Array.isArray(guildState.erp.auditLogs) ? guildState.erp.auditLogs : [];
   guildState.erp.deletedRows = guildState.erp.deletedRows || {};
   guildState.erp.deletedRows.work_list = Array.isArray(guildState.erp.deletedRows.work_list) ? guildState.erp.deletedRows.work_list : [];
   guildState.erp.deletedRows.asset_list = Array.isArray(guildState.erp.deletedRows.asset_list) ? guildState.erp.deletedRows.asset_list : [];
@@ -428,6 +430,19 @@ function ensureGuild(guildId) {
       guildState.erp.nextRowNo[key] = maxNo + 1;
     }
   }
+  guildState.erp.auditLogs = guildState.erp.auditLogs
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => ({
+      id: String(item.id || crypto.randomBytes(10).toString('hex')),
+      at: Number(item.at) || Date.now(),
+      actorUserId: String(item.actorUserId || ''),
+      sheetKey: String(item.sheetKey || ''),
+      rowId: String(item.rowId || ''),
+      rowNo: Number.parseInt(String(item.rowNo || ''), 10) || 0,
+      action: String(item.action || 'unknown'),
+      detail: item.detail && typeof item.detail === 'object' ? item.detail : {}
+    }))
+    .slice(-5000);
   return guildState;
 }
 
@@ -1483,6 +1498,26 @@ function sanitizeIdList(values) {
   return Array.from(new Set(values.map((x) => String(x || '').trim()).filter(Boolean)));
 }
 
+function appendErpAudit(guildState, payload) {
+  if (!guildState || !guildState.erp) {
+    return;
+  }
+  const audit = {
+    id: crypto.randomBytes(10).toString('hex'),
+    at: Date.now(),
+    actorUserId: String(payload && payload.actorUserId ? payload.actorUserId : ''),
+    sheetKey: String(payload && payload.sheetKey ? payload.sheetKey : ''),
+    rowId: String(payload && payload.rowId ? payload.rowId : ''),
+    rowNo: Number.parseInt(String(payload && payload.rowNo ? payload.rowNo : ''), 10) || 0,
+    action: String(payload && payload.action ? payload.action : 'unknown'),
+    detail: payload && payload.detail && typeof payload.detail === 'object' ? payload.detail : {}
+  };
+  guildState.erp.auditLogs.push(audit);
+  if (guildState.erp.auditLogs.length > 5000) {
+    guildState.erp.auditLogs = guildState.erp.auditLogs.slice(-5000);
+  }
+}
+
 function normalizeColumnKey(input) {
   return String(input || '')
     .toLowerCase()
@@ -1992,17 +2027,26 @@ function startDashboardServer() {
     }
     const payload = buildErpPayload(sheetKey, req.body || {});
     const authUser = getDashboardAuthUser(req);
+    const actorUserId = String(authUser && authUser.id ? authUser.id : '');
     const now = Date.now();
     const row = {
       id: crypto.randomBytes(10).toString('hex'),
       no: nextErpRowNo(guildState, sheetKey),
       createdAt: now,
       updatedAt: now,
-      createdBy: String(authUser && authUser.id ? authUser.id : ''),
-      updatedBy: String(authUser && authUser.id ? authUser.id : ''),
+      createdBy: actorUserId,
+      updatedBy: actorUserId,
       ...payload
     };
     guildState.erp[sheetKey].push(row);
+    appendErpAudit(guildState, {
+      actorUserId,
+      sheetKey,
+      rowId: row.id,
+      rowNo: row.no,
+      action: 'create',
+      detail: { values: payload }
+    });
     saveDb();
     return res.json({ ok: true, row: serializeErpRow(sheetKey, row) });
   });
@@ -2046,6 +2090,8 @@ function startDashboardServer() {
       return res.status(400).json({ error: 'No usable rows found in file' });
     }
 
+    const authUser = getDashboardAuthUser(req);
+    const actorUserId = String(authUser && authUser.id ? authUser.id : '');
     if (replaceAll) {
       const removed = guildState.erp[sheetKey] || [];
       if (removed.length) {
@@ -2053,10 +2099,15 @@ function startDashboardServer() {
           ...(guildState.erp.deletedRows[sheetKey] || []),
           ...removed.map((row) => ({ ...row, deletedAt: Date.now() }))
         ].slice(-500);
+        appendErpAudit(guildState, {
+          actorUserId,
+          sheetKey,
+          action: 'replace_all_clear',
+          detail: { removedCount: removed.length }
+        });
       }
       guildState.erp[sheetKey] = [];
     }
-    const authUser = getDashboardAuthUser(req);
     const now = Date.now();
     const inserted = [];
     for (const payload of importRows) {
@@ -2065,12 +2116,20 @@ function startDashboardServer() {
         no: nextErpRowNo(guildState, sheetKey),
         createdAt: now,
         updatedAt: now,
-        createdBy: String(authUser && authUser.id ? authUser.id : ''),
-        updatedBy: String(authUser && authUser.id ? authUser.id : ''),
+        createdBy: actorUserId,
+        updatedBy: actorUserId,
         ...payload
       };
       guildState.erp[sheetKey].push(row);
       inserted.push(row);
+      appendErpAudit(guildState, {
+        actorUserId,
+        sheetKey,
+        rowId: row.id,
+        rowNo: row.no,
+        action: 'import_create',
+        detail: { values: payload }
+      });
     }
     saveDb();
     return res.json({
@@ -2104,9 +2163,28 @@ function startDashboardServer() {
     }
     const payload = buildErpPayload(sheetKey, req.body || {});
     const authUser = getDashboardAuthUser(req);
+    const actorUserId = String(authUser && authUser.id ? authUser.id : '');
+    const before = {};
+    const after = {};
+    for (const key of Object.keys(payload)) {
+      const oldValue = String(row[key] || '');
+      const newValue = String(payload[key] || '');
+      if (oldValue !== newValue) {
+        before[key] = oldValue;
+        after[key] = newValue;
+      }
+    }
     Object.assign(row, payload, {
       updatedAt: Date.now(),
-      updatedBy: String(authUser && authUser.id ? authUser.id : '')
+      updatedBy: actorUserId
+    });
+    appendErpAudit(guildState, {
+      actorUserId,
+      sheetKey,
+      rowId: row.id,
+      rowNo: row.no,
+      action: 'update',
+      detail: { before, after }
     });
     saveDb();
     return res.json({ ok: true, row: serializeErpRow(sheetKey, row) });
@@ -2130,6 +2208,8 @@ function startDashboardServer() {
     if (!canEdit) {
       return res.status(403).json({ error: 'ERP edit requires Operations or Technical Lead permission' });
     }
+    const authUser = getDashboardAuthUser(req);
+    const actorUserId = String(authUser && authUser.id ? authUser.id : '');
     const rows = guildState.erp[sheetKey] || [];
     const found = rows.find((item) => String(item.id || '') === rowId);
     if (!found) {
@@ -2140,6 +2220,14 @@ function startDashboardServer() {
       ...(guildState.erp.deletedRows[sheetKey] || []),
       { ...found, deletedAt: Date.now() }
     ].slice(-500);
+    appendErpAudit(guildState, {
+      actorUserId,
+      sheetKey,
+      rowId: found.id,
+      rowNo: found.no,
+      action: 'delete',
+      detail: { values: buildErpPayload(sheetKey, found) }
+    });
     saveDb();
     return res.json({ ok: true });
   });
@@ -2158,6 +2246,8 @@ function startDashboardServer() {
     if (!canEdit) {
       return res.status(403).json({ error: 'ERP edit requires Operations or Technical Lead permission' });
     }
+    const authUser = getDashboardAuthUser(req);
+    const actorUserId = String(authUser && authUser.id ? authUser.id : '');
     const ids = sanitizeIdList(req.body && req.body.rowIds);
     if (!ids.length) {
       return res.status(400).json({ error: 'rowIds is required' });
@@ -2172,6 +2262,12 @@ function startDashboardServer() {
       ...(guildState.erp.deletedRows[sheetKey] || []),
       ...removed.map((row) => ({ ...row, deletedAt: Date.now() }))
     ].slice(-500);
+    appendErpAudit(guildState, {
+      actorUserId,
+      sheetKey,
+      action: 'delete_many',
+      detail: { removedCount: removed.length, rowNos: removed.map((r) => r.no).filter(Boolean) }
+    });
     saveDb();
     return res.json({ ok: true, removedCount: removed.length });
   });
@@ -2190,6 +2286,8 @@ function startDashboardServer() {
     if (!canEdit) {
       return res.status(403).json({ error: 'ERP edit requires Operations or Technical Lead permission' });
     }
+    const authUser = getDashboardAuthUser(req);
+    const actorUserId = String(authUser && authUser.id ? authUser.id : '');
     const ids = sanitizeIdList(req.body && req.body.rowIds);
     if (!ids.length) {
       return res.status(400).json({ error: 'rowIds is required' });
@@ -2214,6 +2312,12 @@ function startDashboardServer() {
       next.updatedAt = Date.now();
       return next;
     }));
+    appendErpAudit(guildState, {
+      actorUserId,
+      sheetKey,
+      action: 'restore',
+      detail: { restoredCount: restore.length, rowNos: restore.map((r) => r.no).filter(Boolean) }
+    });
     saveDb();
     return res.json({ ok: true, restoredCount: restore.length });
   });
@@ -2428,6 +2532,61 @@ function startDashboardServer() {
       currentOperatorRoleIds: guildState.dashboard.operatorRoleIds || [],
       issuerStats,
       deletedTickets
+    });
+  });
+
+  app.get('/api/master/guilds/:guildId/erp-audit', requireMasterDashboardToken, async (req, res) => {
+    const guild = client.guilds.cache.get(String(req.params.guildId || ''));
+    if (!guild) {
+      return res.status(404).json({ error: 'Guild not found' });
+    }
+    const guildState = ensureGuild(guild.id);
+    await guild.members.fetch({ limit: 1000 }).catch(() => null);
+    const sheetKey = sanitizeErpSheetKey(req.query.sheetKey) || '';
+    const rowNo = Number.parseInt(String(req.query.rowNo || ''), 10);
+    const keyword = String(req.query.keyword || '').trim().toLowerCase();
+    let logs = (guildState.erp.auditLogs || []).slice();
+    if (sheetKey) {
+      logs = logs.filter((item) => String(item.sheetKey || '') === sheetKey);
+    }
+    if (Number.isInteger(rowNo) && rowNo > 0) {
+      logs = logs.filter((item) => Number(item.rowNo) === rowNo);
+    }
+    if (keyword) {
+      logs = logs.filter((item) => {
+        const target = [
+          item.action,
+          item.sheetKey,
+          item.actorUserId,
+          item.rowId,
+          item.rowNo,
+          JSON.stringify(item.detail || {})
+        ].join(' ').toLowerCase();
+        return target.includes(keyword);
+      });
+    }
+    logs.sort((a, b) => Number(b.at || 0) - Number(a.at || 0));
+    logs = logs.slice(0, 1000);
+    const rows = logs.map((item) => {
+      const member = item.actorUserId ? guild.members.cache.get(String(item.actorUserId)) : null;
+      const actorName = member
+        ? (member.displayName || (member.user && member.user.username) || String(item.actorUserId))
+        : (item.actorUserId || 'unknown');
+      return {
+        id: String(item.id || ''),
+        at: Number(item.at) || 0,
+        action: String(item.action || 'unknown'),
+        sheetKey: String(item.sheetKey || ''),
+        rowId: String(item.rowId || ''),
+        rowNo: Number(item.rowNo || 0),
+        actorUserId: String(item.actorUserId || ''),
+        actorName,
+        detail: item.detail && typeof item.detail === 'object' ? item.detail : {}
+      };
+    });
+    return res.json({
+      guild: { id: guild.id, name: guild.name },
+      rows
     });
   });
 

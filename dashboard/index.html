@@ -874,6 +874,35 @@
           <tbody></tbody>
         </table>
       </div>
+      <section class="panel" style="margin-top:12px;">
+        <h2 class="title" style="font-size:18px; margin-bottom:10px;">ERP Edit Audit</h2>
+        <div class="row">
+          <select id="masterErpAuditSheet" class="select">
+            <option value="">전체 시트</option>
+            <option value="work_list">Project Work List</option>
+            <option value="asset_list">Asset List</option>
+            <option value="material_use">Material Use</option>
+          </select>
+          <input id="masterErpAuditRowNo" class="field" placeholder="Row No (optional)" />
+          <input id="masterErpAuditKeyword" class="field" placeholder="키워드 포함 검색" />
+          <button id="masterLoadErpAuditBtn" class="btn btn-soft">로그 조회</button>
+        </div>
+        <div class="table-wrap" style="margin-top:8px;">
+          <table id="masterErpAuditTable">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Sheet</th>
+                <th>Row No</th>
+                <th>Action</th>
+                <th>Actor</th>
+                <th>Detail</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
       <p id="masterSummary" class="fine" style="margin-top:10px;">마스터 데이터 미로딩</p>
     </section>
   </main>
